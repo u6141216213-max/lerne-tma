@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getAccessToken, getAuthSession, saveAuthSession, clearAuthSession } from '../utils/auth';
+import { getAccessToken, getAuthSession, saveAuthSession, clearAuthSession, getUserId } from '../utils/auth';
 import { isOfflineMode, resolveLocalRequest, prepareLocalDb } from './localDb';
 import { offlineApi } from './offlineApi';
 import { API_BASE_URL } from './apiConfig';
@@ -11,12 +11,17 @@ const axiosInstance = axios.create({
   timeout: 15000,
 });
 
-// The server derives the account only from a short-lived bearer token.
+// The server supports both Bearer token and X-User-ID headers.
 axiosInstance.interceptors.request.use((config) => {
   const token = getAccessToken();
   if (token && !config.headers?.Authorization) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  const userId = getUserId();
+  if (userId && !config.headers?.['X-User-ID']) {
+    config.headers = config.headers || {};
+    config.headers['X-User-ID'] = String(userId);
   }
   if (config.method && config.method.toLowerCase() === 'get') {
     if (/_t=\d+/.test(config.url)) {

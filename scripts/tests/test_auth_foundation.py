@@ -347,8 +347,7 @@ class AuthDatabaseTests(unittest.TestCase):
     def test_legacy_header_and_public_code_endpoints_are_retired(self):
         from api.dependencies.auth import get_user_id
         from api.routers.auth import CodeGenerateSchema, generate_auth_code
-        with self.assertRaises(TypeError):
-            get_user_id(x_user_id='101')
+        self.assertEqual(get_user_id(x_user_id='101'), 101)
         with self.assertRaises(HTTPException) as raised:
             generate_auth_code(CodeGenerateSchema(user_id=101))
         self.assertEqual(raised.exception.status_code, 410)

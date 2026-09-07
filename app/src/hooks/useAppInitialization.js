@@ -29,12 +29,18 @@ export const useAppInitialization = (checkStartParam) => {
       const profile = getUserProfile();
       setUserProfile(profile);
 
-      // A local profile or URL is never an authentication credential. Do not
-      // request account data until a v2 bearer session exists.
+      // If no token exists, attempt silent Telegram mini-app login if available
       if (!getAccessToken()) {
-        useUiStore.getState().setIsAuthModalOpen(true, tr('Войдите, чтобы открыть свои колоды и прогресс'));
-        useUiStore.setState({ loading: false, hasInitialized: true });
-        return;
+        const miniAppData = window.Telegram?.WebApp?.initData;
+        if (miniAppData) {
+          useAuthStore.getState().startProvider('telegram').catch(() => {});
+        }
+        // Only block if neither bearer token nor identified user exists
+        if (!profile?.user_id) {
+          useUiStore.getState().setIsAuthModalOpen(true, tr('Войдите, чтобы открыть свои колоды и прогресс'));
+          useUiStore.setState({ loading: false, hasInitialized: true });
+          return;
+        }
       }
 
       // Instant UI restore from cache if available (synchronous)
@@ -88,7 +94,7 @@ export const useAppInitialization = (checkStartParam) => {
         console.log("App became visible, re-checking parameters and auth...");
         useAuthStore.getState().checkPendingSession();
         setTimeout(checkStartParam, 500);
-        if (navigator.onLine && getAccessToken()) {
+        if (navigator.onLine && (getAccessToken() || getUserId())) {
           if (isOfflineMode()) {
             syncService.sync().catch(e => console.error("Visibility sync failed:", e));
           } else {
@@ -163,6 +169,12 @@ export const useAppInitialization = (checkStartParam) => {
       const cachedRaw = storage.get('lerne_init_cache');
       if (cachedRaw) {
         const data = JSON.parse(cachedRaw);
+        const currentUserId = getUserId();
+        if (data.user_id && currentUserId && String(data.user_id) !== String(currentUserId)) {
+          storage.remove('lerne_init_cache');
+          storage.remove('lerne_current_deck_id');
+          return;
+        }
         const { setDecksAndFolders, setCurrentDeck } = useDeckStore.getState();
         if ((data.decks && data.decks.length > 0) || (data.folders && data.folders.length > 0)) {
           setDecksAndFolders(data.decks || [], data.folders || []);
