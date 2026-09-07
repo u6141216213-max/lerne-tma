@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getUserId } from '../utils/auth';
+import { getAccessToken } from '../utils/auth';
 import { isOfflineMode, resolveLocalRequest, prepareLocalDb } from './localDb';
 import { offlineApi } from './offlineApi';
 import { API_BASE_URL } from './apiConfig';
@@ -11,11 +11,11 @@ const axiosInstance = axios.create({
   timeout: 15000,
 });
 
-// Добавляем X-User-ID ко всем запросам автоматически и отключаем кэширование GET-запросов
+// The server derives the account only from a short-lived bearer token.
 axiosInstance.interceptors.request.use((config) => {
-  const userId = getUserId();
-  if (userId && !config.headers['X-User-ID']) {
-    config.headers['X-User-ID'] = userId;
+  const token = getAccessToken();
+  if (token && !config.headers?.Authorization) {
+    config.headers = { ...config.headers, Authorization: `Bearer ${token}` };
   }
   if (config.method && config.method.toLowerCase() === 'get') {
     const separator = config.url.includes('?') ? '&' : '?';

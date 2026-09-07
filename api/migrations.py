@@ -8,6 +8,164 @@ from peewee import SqliteDatabase
 
 logger = logging.getLogger(__name__)
 
+# Auth migrations intentionally bypass the legacy best-effort runner below,
+# which marks failed statements as applied. They are never run on API startup.
+AUTH_FOUNDATION_MIGRATION_ID = 76
+AUTH_CHALLENGE_MIGRATION_ID = 77
+AUTH_PASSWORD_MIGRATION_ID = 78
+AUTH_SESSION_METHOD_MIGRATION_ID = 79
+
+
+def run_auth_migrations(database):
+    """Explicit additive migration; atomic DDL, backfill and history, fail closed.
+
+    Call on a dedicated connection, after the legacy tma_user schema exists.
+    The caller chooses the database; this function never reads connection secrets.
+    Do not append ID 76 to MIGRATIONS or the startup fallback runner.
+    """
+    from peewee import PostgresqlDatabase
+    from api.models import (
+        AUTH_FOUNDATION_MODELS, AUTH_CHALLENGE_MODELS, AUTH_PASSWORD_MODELS, TMAUser, TMAAuthAccount,
+    )
+
+    database = getattr(database, 'obj', database)
+    if not isinstance(database, (SqliteDatabase, PostgresqlDatabase)):
+        raise RuntimeError('Unsupported auth migration database')
+    if database.in_transaction():
+        raise RuntimeError('Auth migration requires its own transaction')
+    owned_connection = database.is_closed()
+    try:
+        database.connect(reuse_if_open=True)
+        options = {'lock_type': 'IMMEDIATE'} if isinstance(database, SqliteDatabase) else {}
+        with database.atomic(**options):
+            if isinstance(database, PostgresqlDatabase):
+                # Serializes this migration across workers; lock is transaction-scoped.
+                database.execute_sql("SET LOCAL lock_timeout = '5s'")
+                database.execute_sql("SET LOCAL statement_timeout = '60s'")
+                database.execute_sql('SELECT pg_advisory_xact_lock(76120906)')
+                database.execute_sql('LOCK TABLE tma_user IN SHARE MODE')
+            database.execute_sql('''CREATE TABLE IF NOT EXISTS tma_migration_history (
+                migration_id INT PRIMARY KEY,
+                applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+            marker = database.param
+            applied = database.execute_sql(
+                f'SELECT migration_id FROM tma_migration_history WHERE migration_id = {marker}',
+                (AUTH_FOUNDATION_MIGRATION_ID,),
+            ).fetchone()
+            if applied:
+                missing = [m._meta.table_name for m in AUTH_FOUNDATION_MODELS
+                           if not database.table_exists(m._meta.table_name)]
+                if missing:
+                    raise RuntimeError('Auth migration history/schema mismatch')
+                result = {'migration_id': AUTH_FOUNDATION_MIGRATION_ID, 'applied': False}
+            else:
+                if not database.table_exists('tma_user'):
+                    raise RuntimeError('Legacy tma_user schema is required before auth migration')
+                if any(database.table_exists(m._meta.table_name) for m in AUTH_FOUNDATION_MODELS):
+                    raise RuntimeError('Untracked auth tables exist; inspect before applying migration')
+                # bind_ctx is scoped to this explicit maintenance operation, never used
+                # by live request handlers. Existing application proxies stay untouched.
+                with database.bind_ctx([TMAUser, *AUTH_FOUNDATION_MODELS], bind_refs=False, bind_backrefs=False):
+                    database.create_tables(AUTH_FOUNDATION_MODELS, safe=False)
+                    # No verified identity is inferred from is_guest, name or email.
+                    # Positive, non-guest historical IDs are only candidates for a later
+                    # verified Telegram login. Guest collisions require separate recovery.
+                    database.execute_sql('''INSERT INTO tma_auth_account
+                        (user_id, legacy_telegram_subject, created_at)
+                        SELECT user_id,
+                               CASE WHEN user_id > 0 AND is_guest = false
+                                    THEN CAST(user_id AS VARCHAR(255)) ELSE NULL END,
+                               CURRENT_TIMESTAMP
+                        FROM tma_user''')
+                    users = TMAUser.select().count()
+                    accounts = TMAAuthAccount.select().count()
+                    if users != accounts:
+                        raise RuntimeError('Auth migration account count mismatch')
+                database.execute_sql(
+                    f'INSERT INTO tma_migration_history (migration_id) VALUES ({marker})',
+                    (AUTH_FOUNDATION_MIGRATION_ID,),
+                )
+                result = {'migration_id': AUTH_FOUNDATION_MIGRATION_ID, 'applied': True,
+                          'accounts': accounts, 'verified_identities': 0}
+        # The foundation marker must be durable before the following additive
+        # migration is considered. A new deployment can safely resume at 77.
+        with database.atomic(**options):
+            if isinstance(database, PostgresqlDatabase):
+                database.execute_sql("SET LOCAL lock_timeout = '5s'")
+                database.execute_sql("SET LOCAL statement_timeout = '60s'")
+                database.execute_sql('SELECT pg_advisory_xact_lock(76120906)')
+            marker = database.param
+            applied = database.execute_sql(
+                f'SELECT migration_id FROM tma_migration_history WHERE migration_id = {marker}',
+                (AUTH_CHALLENGE_MIGRATION_ID,),
+            ).fetchone()
+            if applied:
+                if not database.table_exists('tma_auth_challenge'):
+                    raise RuntimeError('Auth challenge migration history/schema mismatch')
+            else:
+                if database.table_exists('tma_auth_challenge'):
+                    raise RuntimeError('Untracked auth challenge table exists; inspect before applying migration')
+                with database.bind_ctx(AUTH_CHALLENGE_MODELS, bind_refs=False, bind_backrefs=False):
+                    database.create_tables(AUTH_CHALLENGE_MODELS, safe=False)
+                database.execute_sql(
+                    f'INSERT INTO tma_migration_history (migration_id) VALUES ({marker})',
+                    (AUTH_CHALLENGE_MIGRATION_ID,),
+                )
+                result['challenge_migration_applied'] = True
+        with database.atomic(**options):
+            if isinstance(database, PostgresqlDatabase):
+                database.execute_sql("SET LOCAL lock_timeout = '5s'")
+                database.execute_sql("SET LOCAL statement_timeout = '60s'")
+                database.execute_sql('SELECT pg_advisory_xact_lock(76120906)')
+            marker = database.param
+            applied = database.execute_sql(
+                f'SELECT migration_id FROM tma_migration_history WHERE migration_id = {marker}',
+                (AUTH_PASSWORD_MIGRATION_ID,),
+            ).fetchone()
+            if applied:
+                missing = [m._meta.table_name for m in AUTH_PASSWORD_MODELS
+                           if not database.table_exists(m._meta.table_name)]
+                if missing:
+                    raise RuntimeError('Auth password migration history/schema mismatch')
+            else:
+                if any(database.table_exists(m._meta.table_name) for m in AUTH_PASSWORD_MODELS):
+                    raise RuntimeError('Untracked auth password tables exist; inspect before applying migration')
+                with database.bind_ctx(AUTH_PASSWORD_MODELS, bind_refs=False, bind_backrefs=False):
+                    database.create_tables(AUTH_PASSWORD_MODELS, safe=False)
+                database.execute_sql(
+                    f'INSERT INTO tma_migration_history (migration_id) VALUES ({marker})',
+                    (AUTH_PASSWORD_MIGRATION_ID,),
+                )
+                result['password_migration_applied'] = True
+        with database.atomic(**options):
+            if isinstance(database, PostgresqlDatabase):
+                database.execute_sql("SET LOCAL lock_timeout = '5s'")
+                database.execute_sql("SET LOCAL statement_timeout = '60s'")
+                database.execute_sql('SELECT pg_advisory_xact_lock(76120906)')
+            applied = database.execute_sql(
+                f'SELECT migration_id FROM tma_migration_history WHERE migration_id = {marker}',
+                (AUTH_SESSION_METHOD_MIGRATION_ID,),
+            ).fetchone()
+            has_column = any(c.name == 'authentication_method'
+                             for c in database.get_columns('tma_auth_session'))
+            if applied and not has_column:
+                raise RuntimeError('Auth session method migration history/schema mismatch')
+            if not applied:
+                # Fresh foundation schemas already include the nullable field.
+                # Existing sessions stay NULL: never infer their login method.
+                if not has_column:
+                    database.execute_sql('ALTER TABLE tma_auth_session ADD COLUMN authentication_method VARCHAR(16) NULL')
+                database.execute_sql(
+                    f'INSERT INTO tma_migration_history (migration_id) VALUES ({marker})',
+                    (AUTH_SESSION_METHOD_MIGRATION_ID,),
+                )
+                result['session_method_migration_applied'] = True
+        return result
+    finally:
+        if owned_connection and not database.is_closed():
+            database.close()
+
 # Список миграций с уникальными ID: (id, SQL-запрос, имя_базы_данных)
 # 'tma' — основная база (tma_db), 'lerne' — библиотека (lerne_db)
 MIGRATIONS = [

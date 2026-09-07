@@ -1,6 +1,8 @@
 import os
 import logging
 import datetime
+import hashlib
+import hmac
 import urllib.parse
 from fastapi import APIRouter, Request, Header, Depends, HTTPException
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -18,21 +20,15 @@ TOKEN = os.getenv("BOT_TOKEN")
 RAW_CHANNEL = os.getenv("REQUIRED_CHANNEL", "LerneDeutsch287").replace("@", "")
 CHANNEL_ID = f"@{RAW_CHANNEL}"
 # Всегда используем продакшн URL для ссылок в боте, локальная переменная TMA_LINK для разработки
-TMA_URL = "https://tma-amber.vercel.app"
+TMA_URL = os.getenv("TMA_PUBLIC_URL", "https://tma-amber.vercel.app").rstrip("/")
+WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
 
 def make_browser_url(base_url: str, user, extra_param: str = None) -> str:
-    """Генерирует надежный URL для открытия в браузере с сохранением профиля."""
-    uid = getattr(user, "id", None) or getattr(user, "user_id", None)
-    params = {"user_id": uid}
-    if getattr(user, "first_name", None):
-        params["first_name"] = user.first_name
-    if getattr(user, "last_name", None):
-        params["last_name"] = user.last_name
-    if getattr(user, "username", None):
-        params["username"] = user.username
+    """Open the app without treating URL data as an identity claim."""
+    params = {}
     if extra_param:
         params["tgWebAppStartParam"] = extra_param
-    return f"{base_url}/?{urllib.parse.urlencode(params)}"
+    return f"{base_url}/?{urllib.parse.urlencode(params)}" if params else base_url
 
 # Инициализация приложения PTB (без запуска polling)
 ptb_app = Application.builder().token(TOKEN).build() if TOKEN else None
@@ -47,15 +43,21 @@ async def check_user_sub(context, user_id: int):
         return False
 
 async def save_tma_user(user):
-    """Helper to save or update TMA user profile in DB."""
+    """Update a profile only after its Telegram identity was authenticated."""
     try:
-        from api.models import TMAUser
-        tma_user, created = TMAUser.get_or_create(user_id=user.id)
+        from api.models import TMAAuthIdentity, TMAUser
+        identity = TMAAuthIdentity.get_or_none(
+            (TMAAuthIdentity.provider == 'telegram') & (TMAAuthIdentity.subject == str(user.id)))
+        if identity is None:
+            return None
+        tma_user = TMAUser.get_or_none(TMAUser.user_id == identity.account_id)
+        if tma_user is None:
+            logger.error("Authenticated Telegram identity has no user row: %s", user.id)
+            return None
         tma_user.first_name = user.first_name
         tma_user.last_name = user.last_name
         tma_user.username = user.username
         tma_user.updated_at = datetime.datetime.now()
-        # Interaction with bot means user is verified/not a guest
         tma_user.is_guest = False
         tma_user.save()
         logger.info(f"User profile synced via bot: {user.id} ({user.first_name})")
@@ -91,15 +93,35 @@ async def start_handler(update: Update, context):
         if not user:
             return
             
-        # Always ensure user profile is in DB
-        await save_tma_user(user)
-        
         first_name = html.escape(user.first_name or "Пользователь")
         
         # Проверяем наличие аргументов в команде /start (например, /start link_12345)
         args = context.args
+
+        if args and args[0].startswith("auth_"):
+            try:
+                from api.auth.providers import PROOF_TTL, VerifiedIdentity
+                from api.auth.service import confirm_challenge
+                from api.models import auth_utcnow
+                state = args[0].removeprefix("auth_")
+                now = auth_utcnow()
+                proof = VerifiedIdentity(
+                    'telegram', str(user.id), now, now + PROOF_TTL,
+                    hashlib.sha256(f'telegram-bot-start:{state}:{user.id}'.encode()).hexdigest())
+                confirm_challenge(state, proof)
+                await safe_send_reply(update,
+                    "✅ <b>Telegram подтверждён.</b> Вернитесь в Lerne: приложение завершит вход автоматически.")
+            except Exception as exc:
+                logger.info("Rejected Telegram auth challenge: %s", exc)
+                await safe_send_reply(update,
+                    "⚠️ Ссылка входа недействительна или истекла. Вернитесь в Lerne и начните вход ещё раз.")
+            return
         
         if args and args[0].startswith("link_"):
+            # Legacy guest-id links cannot prove ownership and are retired.
+            await safe_send_reply(update,
+                "🔐 Старая ссылка входа больше не действует. Откройте Lerne и выберите Telegram или Google.")
+            return
             try:
                 guest_id = int(args[0].replace("link_", ""))
                 from api.models import TMALinkedSession
@@ -127,6 +149,7 @@ async def start_handler(update: Update, context):
                 ])
                 await safe_send_reply(update, text, reply_markup=keyboard)
                 return
+
             except Exception as e:
                 logger.error(f"Error linking session: {e}", exc_info=True)
                 
@@ -143,6 +166,8 @@ async def start_handler(update: Update, context):
             ])
             await safe_send_reply(update, text, reply_markup=keyboard)
             return
+
+        await save_tma_user(user)
 
         if args and (args[0].startswith("c_") or args[0].startswith("d_") or args[0].startswith("f_") or args[0].startswith("collab_")):
             share_id = args[0]
@@ -245,6 +270,9 @@ def generate_user_login_code(user_id: int) -> str:
 
 async def code_handler(update: Update, context):
     """Команда /code для быстрого получения кода авторизации."""
+    await safe_send_reply(update,
+        "🔐 Коды входа больше не используются. Откройте Lerne и выберите «Войти через Telegram».")
+    return
     try:
         user = update.effective_user
         if not user:
@@ -273,6 +301,9 @@ async def callback_handler(update: Update, context):
             await save_tma_user(user)
         
         if query and query.data == "get_login_code":
+            await safe_send_reply(update,
+                "🔐 Вход по коду отключён. Выберите Telegram или Google в приложении.")
+            return
             code = generate_user_login_code(user.id)
             formatted_code = f"{code[:3]} {code[3:]}"
             text = (
@@ -289,7 +320,7 @@ async def callback_handler(update: Update, context):
                 await query.edit_message_text(
                     "✅ <b>Добро пожаловать!</b>\n\nТебе доступен полный функционал приложения. Удачи в обучении! 🚀",
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🚀 Начать учить в браузере", url=f"{TMA_URL}/?user_id={user.id}")]
+                        [InlineKeyboardButton("🚀 Начать учить в браузере", url=TMA_URL)]
                     ]),
                     parse_mode="HTML"
                 )
@@ -308,8 +339,11 @@ if ptb_app:
 # --- Webhook Endpoint ---
 
 @router.post("/bot_webhook")
-async def bot_webhook(request: Request):
+async def bot_webhook(request: Request, x_telegram_bot_api_secret_token: str | None = Header(default=None)):
     """Основной эндпоинт для приема обновлений от Telegram."""
+    if not WEBHOOK_SECRET or not x_telegram_bot_api_secret_token or not hmac.compare_digest(
+            WEBHOOK_SECRET, x_telegram_bot_api_secret_token):
+        raise HTTPException(status_code=403, detail="invalid_webhook_secret")
     if not ptb_app:
         return {"status": "bot_token_missing"}
 
@@ -331,6 +365,17 @@ async def bot_setup(request: Request):
     """Вспомогательный эндпоинт для установки вебхука и инициализации таблиц."""
     if not TOKEN:
         return {"error": "BOT_TOKEN missing"}
+    setup_token = os.getenv("BOT_SETUP_TOKEN", "")
+    public_api_base = os.getenv("PUBLIC_API_BASE_URL", "").rstrip("/")
+    supplied = request.headers.get("x-internal-setup-token", "")
+    if (not setup_token or not WEBHOOK_SECRET or not public_api_base.startswith("https://")
+            or not supplied or not hmac.compare_digest(setup_token, supplied)):
+        raise HTTPException(status_code=403, detail="bot_setup_not_authorized")
+    webhook_url = f"{public_api_base}/api/bot_webhook"
+    async with ptb_app:
+        success = await ptb_app.bot.set_webhook(url=webhook_url, secret_token=WEBHOOK_SECRET)
+    return {"webhook_url": webhook_url, "success": success,
+            "db_status": "managed_by_explicit_migrations"}
     
     # Инициализация таблиц
     try:
@@ -373,8 +418,11 @@ async def test_bot_reminder(user_id: int = Depends(get_user_id)):
 
 @router.get("/bot/cron-reminders")
 @router.post("/bot/cron-reminders")
-async def trigger_cron_reminders():
+async def trigger_cron_reminders(x_internal_cron_token: str | None = Header(default=None)):
     """Эндпоинт для запуска крона рассылки напоминаний."""
+    cron_token = os.getenv("REMINDER_CRON_TOKEN", "")
+    if not cron_token or not x_internal_cron_token or not hmac.compare_digest(cron_token, x_internal_cron_token):
+        raise HTTPException(status_code=403, detail="cron_not_authorized")
     if not ptb_app:
         return {"status": "skipped", "message": "Bot not configured"}
     async with ptb_app:

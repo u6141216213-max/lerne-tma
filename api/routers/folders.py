@@ -13,7 +13,7 @@ router = APIRouter(
 
 @router.get("")
 def get_folders(user_id: int = Depends(get_user_id)):
-    logger.info(f"GET /api/folders - X-User-ID: {user_id}")
+    logger.info(f"GET /api/folders - authenticated account: {user_id}")
     return services.get_active_folders(user_id)
 
 @router.post("")

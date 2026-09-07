@@ -1,7 +1,7 @@
 import { tr } from '../i18n/locale';
 import { prepareLocalDb, getNextTempId } from './localDb';
 import { networkApi } from './api';
-import { getUserId } from '../utils/auth';
+import { getAccessToken, getUserId } from '../utils/auth';
 
 const entities = ['folders', 'decks', 'cards', 'progress'];
 const keyFor = (name, item, userId) => name === 'progress' ? [item.card_id, userId] : item.id;
@@ -119,9 +119,10 @@ export const syncService = {
   async runSync() {
     if (this.isSyncing) return { success: false, reason: 'Already syncing' };
     if (!navigator.onLine) return { success: false, reason: tr("Нет подключения к интернету") };
+    if (!getAccessToken() || !getUserId()) return { success: false, reason: tr("Требуется вход") };
     this.isSyncing = true;
     const userId = getUserId();
-    const options = { headers: { 'X-User-ID': String(userId) } };
+    const options = {};
     let mappings = { folders: {}, decks: {}, cards: {} };
     try {
       const db = await prepareLocalDb();

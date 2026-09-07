@@ -19,7 +19,7 @@ from api.dependencies.auth import get_user_id
 from api import models, services
 
 # Импорт роутеров
-from api.routers import decks, cards, study, settings, ai, media, bot, feedback, auth, share, debug, trash, sync, folders, collaborative, lid
+from api.routers import decks, cards, study, settings, ai, media, bot, feedback, auth, auth_v2, share, debug, trash, sync, folders, collaborative, lid
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -93,7 +93,7 @@ async def db_session_middleware(request, call_next):
         response = await call_next(request)
     except Exception as exc:
         exc_str = str(exc).lower()
-        if any(k in exc_str for k in ["closed", "terminated", "connection", "socket", "reset", "eof", "exceeded maximum connections"]):
+        if request.method in ('GET', 'HEAD') and any(k in exc_str for k in ["closed", "terminated", "connection", "socket", "reset", "eof", "exceeded maximum connections"]):
             logger.warning(f"DB connection reset due to error: {exc}. Retrying HTTP request...")
             try:
                 if hasattr(models.tma_db, 'obj') and models.tma_db.obj:
@@ -141,6 +141,7 @@ app.include_router(media.router, prefix="/api")
 app.include_router(bot.router, prefix="/api")
 app.include_router(feedback.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
+app.include_router(auth_v2.router, prefix="/api")
 app.include_router(share.router, prefix="/api")
 app.include_router(debug.router, prefix="/api")
 app.include_router(trash.router, prefix="/api")

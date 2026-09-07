@@ -20,6 +20,10 @@ export const ProfileTab = ({ userId }) => {
   const [name, setName] = useState(validInitialName);
   const [email, setEmail] = useState(userProfile?.email || '');
   const [phone, setPhone] = useState(userProfile?.phone || '');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -30,14 +34,7 @@ export const ProfileTab = ({ userId }) => {
     if (userProfile?.phone) setPhone(userProfile.phone);
   }, [userProfile]);
 
-  const currentUserId = userId || userProfile?.user_id || getUserId();
-  const validAccountName = (userProfile?.first_name && userProfile.first_name !== 'Пользователь') 
-    ? userProfile.first_name 
-    : '';
-  const accountParam = userProfile?.username 
-    ? `&account=${userProfile.username}` 
-    : (validAccountName ? `&account=${encodeURIComponent(validAccountName)}` : '');
-  const personalLink = currentUserId ? `${window.location.origin}/?user_id=${currentUserId}${accountParam}` : '';
+  const personalLink = userId || userProfile?.user_id || getUserId() ? window.location.origin : '';
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -63,10 +60,30 @@ export const ProfileTab = ({ userId }) => {
   };
 
   const { 
-    isPolling, 
-    startTelegramLinking, 
-    checkPendingSession 
+    isPolling,
+    startTelegramLinking,
+    checkPendingSession,
+    linkProvider,
+    linkEmailPassword,
+    isStarting,
+    authMethods,
+    passwordSettings,
+    refreshAuthMethods,
+    startPasswordRecovery,
+    cancelPendingAuth
   } = useAuthStore();
+
+  useEffect(() => { if (userProfile && !userProfile.is_guest) refreshAuthMethods(); }, [userProfile, refreshAuthMethods]);
+  const credentialEmail = passwordSettings?.email || loginEmail;
+  const savePassword = async (event) => {
+    event.preventDefault();
+    if (savingPassword || loginPassword !== passwordConfirmation) return;
+    setSavingPassword(true);
+    try {
+      const result = await linkEmailPassword(credentialEmail, loginPassword);
+      if (result.success) { setLoginPassword(''); setPasswordConfirmation(''); }
+    } finally { setSavingPassword(false); }
+  };
 
   return (
     <div className="profile-tab">
@@ -247,6 +264,43 @@ export const ProfileTab = ({ userId }) => {
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: '0.85rem' }}
               >
                 <KeyRound size={15} />{' '}{tr("Войти по 6-значному коду")}{' '}</button>
+            </div>
+          </div>
+        )}
+
+        {userProfile && !userProfile.is_guest && (
+          <div className="link-telegram-section glass" style={{ marginTop: '15px' }}>
+            <h4>{tr("Способы входа")}</h4>
+            <p>{tr("Привяжите второй способ сейчас — затем Google и Telegram будут открывать те же колоды и прогресс.")}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+              {!authMethods && <button type="button" className="btn btn-secondary" onClick={refreshAuthMethods}>{tr('Загрузить способы входа')}</button>}
+              {authMethods?.includes('google') ? <span>Google ✓</span> : <button type="button" disabled={!authMethods || isStarting || isPolling} className="btn btn-secondary" onClick={() => linkProvider('google')}>
+                G · {tr("Добавить Google")}
+              </button>}
+              {authMethods?.includes('telegram') ? <span>Telegram ✓</span> : <button type="button" disabled={!authMethods || isStarting || isPolling} className="btn btn-telegram" onClick={() => linkProvider('telegram')}>
+                <Send size={16} /> {tr("Добавить Telegram")}
+              </button>}
+              <p>{tr('Пароль можно восстановить только через заранее привязанный Telegram или Google. Письма пока не отправляются.')}</p>
+              {passwordSettings?.email && !passwordSettings.can_reset_password && <>
+                <p>{tr('Войдите заново через привязанный Telegram или Google и повторите в течение 5 минут.')}</p>
+                {['telegram', 'google'].filter(provider => authMethods?.includes(provider)).map(provider =>
+                  <button key={provider} type="button" className="btn btn-secondary" disabled={isStarting || isPolling} onClick={() => startPasswordRecovery(provider)}>
+                    {provider === 'telegram' ? tr('Войти через Telegram') : tr('Войти через Google')}
+                  </button>)}
+              </>}
+              <form onSubmit={savePassword} style={{ display: 'grid', gap: 8 }}>
+                <input aria-label={tr("Email для входа")} type="email" autoComplete="username" required readOnly={Boolean(passwordSettings?.email)} value={credentialEmail} onChange={(event) => setLoginEmail(event.target.value)} placeholder="name@example.com" />
+                <input aria-label={tr("Новый пароль")} type="password" autoComplete="new-password" minLength={12} maxLength={256} required value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} placeholder={tr("Пароль минимум 12 символов")} />
+                <input aria-label={tr('Повторите пароль')} type="password" autoComplete="new-password" required value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} placeholder={tr('Повторите пароль')} />
+                {passwordConfirmation && passwordConfirmation !== loginPassword && <span role="status">{tr('Пароли не совпадают')}</span>}
+                <button type="submit" className="btn btn-secondary" disabled={!passwordSettings || savingPassword || isPolling || isStarting || !credentialEmail || loginPassword.length < 12 || loginPassword !== passwordConfirmation || (Boolean(passwordSettings.email) && !passwordSettings.can_reset_password)}>
+                  {passwordSettings?.email ? tr('Сменить пароль и завершить другие сеансы') : tr("Сохранить email и пароль")}
+                </button>
+              </form>
+              {isPolling && <button type="button" className="btn btn-secondary" onClick={checkPendingSession}>
+                {tr("Я подтвердил, продолжить")}
+              </button>}
+              {isPolling && <button type="button" className="btn btn-secondary" onClick={cancelPendingAuth}>{tr('Отмена')}</button>}
             </div>
           </div>
         )}

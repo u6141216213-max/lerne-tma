@@ -253,6 +253,125 @@ class TMAAuthCode(BaseModel):
     class Meta:
         table_name = 'tma_auth_code'
 
+
+# Auth v2 is an additive foundation. It is deliberately NOT installed by
+# create_all_tables(): use the explicit, transactional auth migration first.
+# Existing resource user_id values remain the canonical Lerne account IDs.
+def auth_utcnow():
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
+
+class TMAAuthAccount(BaseModel):
+    user = ForeignKeyField(TMAUser, primary_key=True, column_name='user_id', on_delete='CASCADE')
+    # A migration candidate, NOT a verified identity. Never use it to authenticate.
+    legacy_telegram_subject = CharField(max_length=255, null=True, unique=True)
+    disabled_at = DateTimeField(null=True)
+    created_at = DateTimeField(default=auth_utcnow)
+
+    class Meta:
+        table_name = 'tma_auth_account'
+
+
+class TMAAuthIdentity(BaseModel):
+    id = AutoField()
+    account = ForeignKeyField(TMAAuthAccount, column_name='account_id', on_delete='CASCADE')
+    provider = CharField(max_length=16, constraints=[Check("provider IN ('telegram', 'google')")])
+    subject = CharField(max_length=255)
+    created_at = DateTimeField(default=auth_utcnow)
+
+    class Meta:
+        table_name = 'tma_auth_identity'
+        indexes = (
+            (('provider', 'subject'), True),
+            (('account', 'provider'), True),
+        )
+
+
+class TMAAuthSession(BaseModel):
+    id = CharField(max_length=36, primary_key=True)
+    account = ForeignKeyField(TMAAuthAccount, column_name='account_id', on_delete='CASCADE')
+    authenticated_at = DateTimeField()
+    authentication_method = CharField(max_length=16, null=True)
+    created_at = DateTimeField(default=auth_utcnow)
+    expires_at = DateTimeField(index=True)
+    revoked_at = DateTimeField(null=True)
+
+    class Meta:
+        table_name = 'tma_auth_session'
+
+
+class TMAAuthToken(BaseModel):
+    token_hash = CharField(max_length=64, primary_key=True)
+    session = ForeignKeyField(TMAAuthSession, column_name='session_id', on_delete='CASCADE')
+    kind = CharField(max_length=8, constraints=[Check("kind IN ('access', 'refresh')")])
+    created_at = DateTimeField(default=auth_utcnow)
+    expires_at = DateTimeField(index=True)
+    consumed_at = DateTimeField(null=True)
+
+    class Meta:
+        table_name = 'tma_auth_token'
+
+
+class TMAAuthProof(BaseModel):
+    # Keep consumed proofs until expiry to reject provider-credential replay.
+    proof_hash = CharField(max_length=64, primary_key=True)
+    expires_at = DateTimeField(index=True)
+
+    class Meta:
+        table_name = 'tma_auth_proof'
+
+
+class TMAAuthChallenge(BaseModel):
+    id = CharField(max_length=36, primary_key=True)
+    provider = CharField(max_length=16, constraints=[Check("provider IN ('telegram', 'google')")])
+    purpose = CharField(max_length=8, constraints=[Check("purpose IN ('login', 'link')")])
+    account = ForeignKeyField(TMAAuthAccount, column_name='account_id', null=True, on_delete='CASCADE')
+    initiating_session_id = CharField(max_length=36, null=True)
+    secret_hash = CharField(max_length=64)
+    state_hash = CharField(max_length=64, unique=True)
+    nonce = CharField(max_length=64, null=True)
+    pkce_verifier = CharField(max_length=128, null=True)
+    verified_subject = CharField(max_length=255, null=True)
+    verified_at = DateTimeField(null=True)
+    verified_expires_at = DateTimeField(null=True)
+    proof_hash = CharField(max_length=64, null=True)
+    created_at = DateTimeField(default=auth_utcnow)
+    expires_at = DateTimeField(index=True)
+    completed_at = DateTimeField(null=True)
+
+    class Meta:
+        table_name = 'tma_auth_challenge'
+
+
+class TMAAuthPassword(BaseModel):
+    """One explicitly linked email/password credential per Lerne account."""
+    account = ForeignKeyField(TMAAuthAccount, primary_key=True, column_name='account_id', on_delete='CASCADE')
+    email = CharField(max_length=320, unique=True)
+    password_hash = CharField(max_length=256)
+    created_at = DateTimeField(default=auth_utcnow)
+    changed_at = DateTimeField(default=auth_utcnow)
+
+    class Meta:
+        table_name = 'tma_auth_password'
+
+
+class TMAAuthPasswordThrottle(BaseModel):
+    """Durable per-email failed-login counter; email itself is never stored here."""
+    email_hash = CharField(max_length=64, primary_key=True)
+    failures = IntegerField(default=0)
+    window_started_at = DateTimeField(default=auth_utcnow)
+    locked_until = DateTimeField(null=True)
+    updated_at = DateTimeField(default=auth_utcnow)
+
+    class Meta:
+        table_name = 'tma_auth_password_throttle'
+
+
+AUTH_FOUNDATION_MODELS = (TMAAuthAccount, TMAAuthIdentity, TMAAuthSession, TMAAuthToken, TMAAuthProof)
+AUTH_CHALLENGE_MODELS = (TMAAuthChallenge,)
+AUTH_PASSWORD_MODELS = (TMAAuthPassword, TMAAuthPasswordThrottle)
+AUTH_MODELS = (*AUTH_FOUNDATION_MODELS, *AUTH_CHALLENGE_MODELS, *AUTH_PASSWORD_MODELS)
+
 class LibraryCategory(Model):
     id = AutoField()
     name = CharField()

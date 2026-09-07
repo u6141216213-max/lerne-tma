@@ -11,7 +11,7 @@ except ImportError:
     WebAppInfo = None
 
 from peewee import fn, Case, JOIN
-from ..models import TMA_Deck, TMA_Card, TMAProgress, TMAUser, TMASetting, tma_db
+from ..models import TMA_Deck, TMA_Card, TMAProgress, TMAUser, TMASetting, TMAAuthIdentity, tma_db
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +210,11 @@ async def send_reminder_to_user(bot_app, user_id: int, force: bool = False) -> d
         if not user or user.is_guest:
             return {"status": "skipped", "message": "Guest user"}
 
+        identity = TMAAuthIdentity.get_or_none(
+            (TMAAuthIdentity.account == user_id) & (TMAAuthIdentity.provider == 'telegram'))
+        if identity is None or not identity.subject.isdigit() or int(identity.subject) <= 0:
+            return {"status": "skipped", "message": "Telegram not linked"}
+
         settings = get_user_reminder_settings(user_id)
         if not settings.get("enabled", True) and not force:
             return {"status": "skipped", "message": "Notifications disabled by user"}
@@ -224,11 +229,11 @@ async def send_reminder_to_user(bot_app, user_id: int, force: bool = False) -> d
         msg_text = format_reminder_message(first_name, summary, is_test=force)
 
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🚀 Учить в браузере", url=f"{TMA_URL}/?user_id={user_id}")]
+            [InlineKeyboardButton("🚀 Учить в браузере", url=TMA_URL)]
         ])
 
         await bot_app.bot.send_message(
-            chat_id=user_id,
+            chat_id=int(identity.subject),
             text=msg_text,
             parse_mode="HTML",
             reply_markup=keyboard
@@ -333,4 +338,3 @@ async def check_and_send_all_reminders(bot_app) -> dict:
     except Exception as e:
         logger.error(f"Error in check_and_send_all_reminders: {e}", exc_info=True)
         return {"status": "error", "message": str(e)}
-

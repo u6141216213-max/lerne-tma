@@ -1,7 +1,7 @@
 import { tr } from '../i18n/locale';
 import { getInterfaceLanguage, setInterfaceLanguage, normalizeInterfaceLanguage } from '../i18n/locale';
 import { useEffect } from 'react';
-import { getUserId, getUserProfile, storage, cloudStorage } from '../utils/auth';
+import { getAccessToken, getUserId, getUserProfile, storage, cloudStorage } from '../utils/auth';
 import api from '../services/api';
 import { useUiStore } from '../store/useUiStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -28,6 +28,14 @@ export const useAppInitialization = (checkStartParam) => {
     const init = async () => {
       const profile = getUserProfile();
       setUserProfile(profile);
+
+      // A local profile or URL is never an authentication credential. Do not
+      // request account data until a v2 bearer session exists.
+      if (!getAccessToken()) {
+        useUiStore.getState().setIsAuthModalOpen(true, tr('Войдите, чтобы открыть свои колоды и прогресс'));
+        useUiStore.setState({ loading: false, hasInitialized: true });
+        return;
+      }
 
       // Instant UI restore from cache if available (synchronous)
       if (!isOfflineMode()) loadCachedInitData();
@@ -80,7 +88,7 @@ export const useAppInitialization = (checkStartParam) => {
         console.log("App became visible, re-checking parameters and auth...");
         useAuthStore.getState().checkPendingSession();
         setTimeout(checkStartParam, 500);
-        if (navigator.onLine) {
+        if (navigator.onLine && getAccessToken()) {
           if (isOfflineMode()) {
             syncService.sync().catch(e => console.error("Visibility sync failed:", e));
           } else {

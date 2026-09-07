@@ -39,12 +39,14 @@ def sync_user(data: UserSyncSchema, user_id: int = Depends(get_user_id)):
     Silently registers or updates user info from Telegram or guest session.
     """
     try:
-        user, created = TMAUser.get_or_create(user_id=user_id)
+        user = TMAUser.get_or_none(TMAUser.user_id == user_id)
+        if user is None:
+            raise HTTPException(status_code=401, detail="invalid_session")
+        created = False
         
         # Merge guest data if guest_id was provided and differs from user_id
         if data.guest_id and data.guest_id != user_id:
-            from api import services
-            services.merge_guest_data(data.guest_id, user_id)
+            raise HTTPException(status_code=410, detail="legacy_guest_merge_retired")
         
         # Update info if provided in request (usually from Telegram WebApp)
         if data.first_name and data.first_name != "Пользователь": 
@@ -122,7 +124,9 @@ def get_me(user_id: int = Depends(get_user_id)):
 
 @router.post("/user/language")
 def update_user_language(data: UserLanguageSchema, user_id: int = Depends(get_user_id)):
-    user, _ = TMAUser.get_or_create(user_id=user_id)
+    user = TMAUser.get_or_none(TMAUser.user_id == user_id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="invalid_session")
     if data.active_language:
         lang = (data.active_language or "de").lower().strip()
         if lang in ["de", "en", "no"]:
@@ -145,6 +149,7 @@ def update_user_language(data: UserLanguageSchema, user_id: int = Depends(get_us
 @router.post("/auth/session")
 def create_session(guest_id: int):
     """Creates a pending auth session for polling."""
+    raise HTTPException(status_code=410, detail="legacy_auth_retired")
     session, created = TMALinkedSession.get_or_create(guest_id=guest_id)
     if not (session.is_confirmed and session.telegram_id):
         session.is_confirmed = False
@@ -156,6 +161,7 @@ def create_session(guest_id: int):
 @router.get("/auth/session/{guest_id}")
 def check_session(guest_id: int):
     """Checks if the session was confirmed by the bot."""
+    raise HTTPException(status_code=410, detail="legacy_auth_retired")
     session = TMALinkedSession.get_or_none(TMALinkedSession.guest_id == guest_id)
     if not session:
         return {"status": "not_found"}
@@ -184,6 +190,7 @@ def check_session(guest_id: int):
 @router.post("/auth/code/generate")
 def generate_auth_code(data: CodeGenerateSchema):
     """Generates a 6-digit one-time code for account login (valid for 15 minutes)."""
+    raise HTTPException(status_code=410, detail="legacy_auth_retired")
     import random
     from api.models import TMAAuthCode, TMAUser
     
@@ -213,6 +220,7 @@ def generate_auth_code(data: CodeGenerateSchema):
 @router.post("/auth/code/verify")
 def verify_auth_code(data: CodeVerifySchema):
     """Verifies a 6-digit one-time code entered by user in APK or Web."""
+    raise HTTPException(status_code=410, detail="legacy_auth_retired")
     from api.models import TMAAuthCode, TMAUser
     from api import services
     

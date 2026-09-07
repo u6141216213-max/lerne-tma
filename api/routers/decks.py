@@ -14,7 +14,7 @@ router = APIRouter(
 
 @router.get("")
 def get_decks(user_id: int = Depends(get_user_id)):
-    logger.info(f"GET /api/decks - X-User-ID: {user_id}")
+    logger.info(f"GET /api/decks - authenticated account: {user_id}")
     return services.get_active_decks(user_id)
     
 @router.post("")
@@ -88,7 +88,7 @@ def toggle_deck_learning(deck_id: int, data: dict = None, user_id: int = Depends
 
 @router.post("/import-json")
 def import_json_deck(data: dict, user_id: int = Depends(get_user_id)):
-    logger.info(f"POST /api/decks/import-json - X-User-ID: {user_id}")
+    logger.info(f"POST /api/decks/import-json - authenticated account: {user_id}")
     result = services.import_deck_from_json(data, user_id)
     if result:
         return {"status": "success", "deck_id": result.id}
@@ -132,7 +132,7 @@ class BatchImportRequest(BaseModel):
 
 @router.post("/external/import/{deck_id}")
 def import_external_deck(deck_id: int, mode: Optional[str] = 'merge', force_trash: bool = False, user_id: int = Depends(get_user_id)):
-    logger.info(f"POST /api/decks/external/import/{deck_id} (mode={mode}, force_trash={force_trash}) - X-User-ID: {user_id}")
+    logger.info(f"POST /api/decks/external/import/{deck_id} (mode={mode}, force_trash={force_trash}) - authenticated account: {user_id}")
     result = services.import_deck(deck_id, user_id, mode=mode or 'merge', force_trash=force_trash)
     if isinstance(result, dict) and result.get("status") == "in_trash":
         return result
@@ -142,14 +142,14 @@ def import_external_deck(deck_id: int, mode: Optional[str] = 'merge', force_tras
 
 @router.post("/external/import-batch")
 def import_external_decks_batch(body: BatchImportRequest, user_id: int = Depends(get_user_id)):
-    logger.info(f"POST /api/decks/external/import-batch - X-User-ID: {user_id}, count={len(body.deck_ids)}, mode={body.mode}, force_trash={body.force_trash}")
+    logger.info(f"POST /api/decks/external/import-batch - authenticated account: {user_id}, count={len(body.deck_ids)}, mode={body.mode}, force_trash={body.force_trash}")
     imported_ids = services.import_decks_batch(body.deck_ids, user_id, mode=body.mode or 'merge', force_trash=body.force_trash or False)
     return {"status": "success", "imported_deck_ids": imported_ids}
 
 
 @router.post("/external/{deck_id}/toggle-default")
 def toggle_default_deck(deck_id: int, user_id: int = Depends(get_user_id)):
-    logger.info(f"POST /api/decks/external/{deck_id}/toggle-default - X-User-ID: {user_id}")
+    logger.info(f"POST /api/decks/external/{deck_id}/toggle-default - authenticated account: {user_id}")
     ADMIN_USER_ID = 642478257
     if user_id != ADMIN_USER_ID:
         raise HTTPException(status_code=403, detail="Only admins can toggle default decks")

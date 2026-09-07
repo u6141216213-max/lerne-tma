@@ -5,6 +5,9 @@ from fastapi.responses import HTMLResponse, Response
 
 from api.models import TMAUser, TMA_Deck, TMA_Card, TMA_Folder, TMAMedia
 from api.dependencies.auth import get_user_id
+from api.auth.dependencies import get_bearer_token
+from api.auth.errors import AuthError
+from api.auth.service import authenticate
 from api.services.sharing_service import SharingService
 from api.templates.share_templates import get_share_html, get_share_error_html
 
@@ -64,16 +67,18 @@ def generate_share(type: str, item_id: int, data: dict = Body(None), user_id: in
 
 
 @router.get("/share/info/{share_id}")
-def get_share_info(share_id: str, x_user_id: Optional[str] = Header(None)):
+def get_share_info(share_id: str, authorization: Optional[str] = Header(None)):
     """Gets public info about a shared item with fast user comparison."""
     is_collab = share_id.startswith("collab_")
     clean_id = share_id.replace("collab_", "").strip()
 
     uid = None
-    if x_user_id:
+    if authorization:
         try:
-            uid = int(x_user_id)
-        except Exception:
+            uid = authenticate(get_bearer_token(authorization)).account_id
+        except (AuthError, HTTPException):
+            # Shared material remains public; a bad optional credential never
+            # selects an arbitrary account for comparison.
             pass
 
     if clean_id.startswith("d_"):
@@ -303,7 +308,6 @@ def get_share_preview_image(share_id: str):
     info = get_share_info(share_id)
     img_data = SharingService.get_preview_image(info, share_id)
     return Response(content=img_data, media_type="image/jpeg", headers=headers)
-
 
 
 
