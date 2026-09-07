@@ -19,6 +19,44 @@ from api import ai_service
 
 
 
+@router.get("/user/settings")
+def get_user_settings_endpoint(user_id: int = Depends(get_user_id)):
+    import json
+    try:
+        setting = models.TMASetting.get_or_none(models.TMASetting.key == f"USER_SETTINGS_{user_id}")
+        if setting and setting.value:
+            return json.loads(setting.value)
+    except Exception as e:
+        logger.error(f"Error fetching user settings for {user_id}: {e}")
+    return {}
+
+@router.post("/user/settings")
+def save_user_settings_endpoint(data: dict, user_id: int = Depends(get_user_id)):
+    import json, datetime
+    try:
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=400, detail="Settings must be a dictionary")
+        setting, _ = models.TMASetting.get_or_create(
+            key=f"USER_SETTINGS_{user_id}",
+            defaults={"value": "{}", "updated_at": datetime.datetime.now()}
+        )
+        current = {}
+        if setting.value:
+            try:
+                current = json.loads(setting.value)
+            except Exception:
+                current = {}
+        current.update(data)
+        setting.value = json.dumps(current, ensure_ascii=False)
+        setting.updated_at = datetime.datetime.now()
+        setting.save()
+        return {"status": "success", "settings": current}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving user settings for {user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save user settings")
+
 @router.get("/user/reminder-settings")
 def get_user_reminder_settings_endpoint(user_id: int = Depends(get_user_id)):
     return services.get_user_reminder_settings(user_id)

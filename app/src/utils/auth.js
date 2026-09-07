@@ -9,11 +9,20 @@ const storage = {
 const SESSION_KEY = 'lerne_auth_v2_session';
 const PROFILE_KEY = 'lerne_user_profile';
 
+let memorySession = null;
+
 export const getAuthSession = () => {
+  if (memorySession?.access_token && memorySession?.refresh_token) {
+    return memorySession;
+  }
   try {
     const value = storage.get(SESSION_KEY);
     const parsed = value ? JSON.parse(value) : null;
-    return parsed?.access_token && parsed?.refresh_token ? parsed : null;
+    if (parsed?.access_token && parsed?.refresh_token) {
+      memorySession = parsed;
+      return memorySession;
+    }
+    return null;
   } catch { return null; }
 };
 
@@ -21,14 +30,18 @@ export const getAccessToken = () => getAuthSession()?.access_token || null;
 
 export const saveAuthSession = (session) => {
   if (!session?.access_token || !session?.refresh_token) throw new Error('Invalid authentication session');
+  memorySession = session;
   storage.set(SESSION_KEY, JSON.stringify(session));
 };
 
 export const clearAuthSession = () => {
+  memorySession = null;
   storage.remove(SESSION_KEY);
   storage.remove(PROFILE_KEY);
   storage.remove('lerne_user_id');
   storage.remove('lerne_init_cache');
+  storage.remove('lerne_last_sync_time');
+  storage.remove('lerne_current_deck_id');
 };
 
 export const getUserProfile = () => {

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { tr } from '../i18n/locale';
 import api from '../services/api';
-import { getUserProfile, saveUserProfile, saveAuthSession, clearAuthSession, storage } from '../utils/auth';
+import { getUserProfile, saveUserProfile, saveAuthSession, clearAuthSession, getUserId, storage } from '../utils/auth';
+import { closeLocalDb, resetAllDatabases } from '../services/localDb';
 import { openExternalLink } from '../utils/platform';
 import { useUiStore } from './useUiStore';
 import { useDeckStore } from './useDeckStore';
@@ -73,9 +74,14 @@ export const useAuthStore = create((set, get) => ({
   },
 
   finishLogin: async (tokens, { recovery = false, suggestTelegram = false } = {}) => {
+    const prevUserId = getUserId();
     saveAuthSession(tokens);
     const response = await api.get('/auth/v2/me');
     const profile = response.data;
+    if (prevUserId && String(prevUserId) !== String(profile.user_id)) {
+      useDeckStore.getState().resetDeckStore?.();
+      closeLocalDb(prevUserId);
+    }
     get().setUserProfile(profile);
     storage.remove('lerne_init_cache');
     storage.remove('lerne_last_sync_time');
@@ -211,6 +217,12 @@ export const useAuthStore = create((set, get) => ({
   // Kept as a clear UI response for obsolete controls in older cached bundles.
   loginWithCode: async () => ({ success: false, error: tr('Вход по коду больше не поддерживается.') }),
   logout: () => {
+    const currentUserId = getUserId();
+    useDeckStore.getState().resetDeckStore?.();
+    if (currentUserId) {
+      closeLocalDb(currentUserId);
+    }
+    resetAllDatabases();
     clearAuthSession();
     clearPending();
     stopPolling();

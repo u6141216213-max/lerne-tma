@@ -67,6 +67,56 @@ export const DESIGN_STORAGE_MAP = {
   previewCardBg: 'lerne_preview_card_bg',
 };
 
+export const STUDY_STORAGE_MAP = {
+  autoPlay: 'lerne_autoplay',
+  autoShow: 'lerne_autoshow',
+  autoplayOrder: 'lerne_autoplay_order',
+  autoplayFrontPause: 'lerne_autoplay_front_pause',
+  autoplayBackPause: 'lerne_autoplay_back_pause',
+  autoplayFrontRepeat: 'lerne_autoplay_front_repeat',
+  autoplayBackRepeat: 'lerne_autoplay_back_repeat',
+  autoplayCardRepeat: 'lerne_autoplay_card_repeat',
+  ttsSpeed: 'lerne_tts_speed',
+  ttsSpeedRu: 'lerne_tts_speed_ru',
+  autoplayLoop: 'lerne_autoplay_loop',
+  autoplayForceFrontAudio: 'lerne_autoplay_force_front_audio',
+  autoplayForceBackAudio: 'lerne_autoplay_force_back_audio',
+  studyMode: 'lerne_study_mode',
+  speechMatchThreshold: 'lerne_speech_match_threshold',
+  voiceBack: 'lerne_voice_back',
+  randomEnabledModes: 'lerne_random_enabled_modes',
+  srsExtendedGrades: 'lerne_srs_extended_grades',
+};
+
+export const collectUserSettings = (state) => {
+  const settings = {};
+  Object.keys(DESIGN_STORAGE_MAP).forEach((k) => {
+    if (state[k] !== undefined) settings[k] = state[k];
+  });
+  Object.keys(STUDY_STORAGE_MAP).forEach((k) => {
+    if (state[k] !== undefined) settings[k] = state[k];
+  });
+  if (state.userDesign !== undefined) {
+    settings.userDesign = state.userDesign;
+  }
+  return settings;
+};
+
+let saveTimer = null;
+export const debouncedSaveSettings = (get) => {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      const { getAccessToken } = await import('../utils/auth');
+      if (!getAccessToken()) return;
+      const settings = collectUserSettings(get());
+      await api.post('/user/settings', settings);
+    } catch (e) {
+      console.warn('Failed to sync user settings to server:', e);
+    }
+  }, 1000);
+};
+
 const DESIGN_STORAGE_VERSION = '2026_08_emerald_final_v4';
 
 const getInitialDesignState = () => {
@@ -136,6 +186,7 @@ export const useSettingsStore = create((set, get) => {
       const parsedVal = isNumber && val !== null && val !== undefined ? Number(val) : val;
       storage.set(storageKey, parsedVal);
       set({ [stateKey]: parsedVal });
+      debouncedSaveSettings(get);
     };
   });
 
@@ -145,74 +196,92 @@ export const useSettingsStore = create((set, get) => {
     setSpeechMatchThreshold: (value) => {
       storage.set('lerne_speech_match_threshold', value);
       set({ speechMatchThreshold: Number(value) });
+      debouncedSaveSettings(get);
     },
     setStudyMode: (value) => {
       storage.set('lerne_study_mode', value);
       set({ studyMode: value });
+      debouncedSaveSettings(get);
     },
     setRandomEnabledModes: (modes) => {
       storage.set('lerne_random_enabled_modes', JSON.stringify(modes));
       set({ randomEnabledModes: modes });
+      debouncedSaveSettings(get);
     },
     setAutoPlay: (value) => {
       storage.set('lerne_autoplay', value);
       set({ autoPlay: value });
+      debouncedSaveSettings(get);
     },
     setAutoShow: (value) => {
       storage.set('lerne_autoshow', value);
       set({ autoShow: value });
+      debouncedSaveSettings(get);
     },
     setAutoplayOrder: (value) => {
       storage.set('lerne_autoplay_order', value);
       set({ autoplayOrder: value });
+      debouncedSaveSettings(get);
     },
     setAutoplayFrontPause: (value) => {
       storage.set('lerne_autoplay_front_pause', value);
       set({ autoplayFrontPause: Number(value) });
+      debouncedSaveSettings(get);
     },
     setAutoplayBackPause: (value) => {
       storage.set('lerne_autoplay_back_pause', value);
       set({ autoplayBackPause: Number(value) });
+      debouncedSaveSettings(get);
     },
     setAutoplayFrontRepeat: (value) => {
       storage.set('lerne_autoplay_front_repeat', value);
       set({ autoplayFrontRepeat: Number(value) });
+      debouncedSaveSettings(get);
     },
     setAutoplayBackRepeat: (value) => {
       storage.set('lerne_autoplay_back_repeat', value);
       set({ autoplayBackRepeat: Number(value) });
+      debouncedSaveSettings(get);
     },
     setAutoplayCardRepeat: (value) => {
       storage.set('lerne_autoplay_card_repeat', value);
       set({ autoplayCardRepeat: Number(value) });
+      debouncedSaveSettings(get);
     },
     setTtsSpeed: (value) => {
       storage.set('lerne_tts_speed', value);
       set({ ttsSpeed: Number(value) });
+      debouncedSaveSettings(get);
     },
     setTtsSpeedRu: (value) => {
       storage.set('lerne_tts_speed_ru', value);
       set({ ttsSpeedRu: Number(value) });
+      debouncedSaveSettings(get);
     },
     setAutoplayLoop: (value) => {
       storage.set('lerne_autoplay_loop', value);
       set({ autoplayLoop: value });
+      debouncedSaveSettings(get);
     },
     setAutoplayForceFrontAudio: (value) => {
       storage.set('lerne_autoplay_force_front_audio', value);
       set({ autoplayForceFrontAudio: value });
+      debouncedSaveSettings(get);
     },
     setAutoplayForceBackAudio: (value) => {
       storage.set('lerne_autoplay_force_back_audio', value);
       set({ autoplayForceBackAudio: value });
+      debouncedSaveSettings(get);
     },
     setVoiceBack: (value) => {
       storage.set('lerne_voice_back', value);
       set({ voiceBack: value });
+      debouncedSaveSettings(get);
     },
     setSrsExtendedGrades: (value) => {
       storage.set('lerne_srs_extended_grades', value);
       set({ srsExtendedGrades: Boolean(value) });
+      debouncedSaveSettings(get);
     },
 
     // --- Design Settings & Setters ---
@@ -249,6 +318,7 @@ export const useSettingsStore = create((set, get) => {
         const storageKey = DESIGN_STORAGE_MAP[k];
         if (storageKey) storage.set(storageKey, v);
       });
+      debouncedSaveSettings(get);
     },
 
     saveUserDesign: () => {
@@ -259,6 +329,7 @@ export const useSettingsStore = create((set, get) => {
       });
       storage.set('lerne_user_design', JSON.stringify(design));
       set({ userDesign: design });
+      debouncedSaveSettings(get);
     },
 
     applyUserDesign: () => {
@@ -271,6 +342,67 @@ export const useSettingsStore = create((set, get) => {
       Object.entries(DESIGN_STORAGE_MAP).forEach(([stateKey, storageKey]) => {
         storage.set(storageKey, DEFAULT_DESIGN_SETTINGS[stateKey]);
       });
+      debouncedSaveSettings(get);
+    },
+
+    syncUserSettingsFromServer: (serverSettings) => {
+      if (!serverSettings || typeof serverSettings !== 'object') return;
+      const updates = {};
+
+      // Apply design settings
+      Object.entries(DESIGN_STORAGE_MAP).forEach(([stateKey, storageKey]) => {
+        if (serverSettings[stateKey] !== undefined) {
+          const defaultVal = DEFAULT_DESIGN_SETTINGS[stateKey];
+          const val = typeof defaultVal === 'number' 
+            ? Number(serverSettings[stateKey]) 
+            : serverSettings[stateKey];
+          updates[stateKey] = val;
+          storage.set(storageKey, val);
+        }
+      });
+
+      // Apply study/SRS settings
+      Object.entries(STUDY_STORAGE_MAP).forEach(([stateKey, storageKey]) => {
+        if (serverSettings[stateKey] !== undefined) {
+          const val = serverSettings[stateKey];
+          if (typeof val === 'boolean') {
+            storage.set(storageKey, String(val));
+          } else if (typeof val === 'number') {
+            storage.set(storageKey, String(val));
+          } else if (Array.isArray(val) || (typeof val === 'object' && val !== null)) {
+            storage.set(storageKey, JSON.stringify(val));
+          } else {
+            storage.set(storageKey, val);
+          }
+          updates[stateKey] = val;
+        }
+      });
+
+      if (serverSettings.userDesign !== undefined) {
+        updates.userDesign = serverSettings.userDesign;
+        if (serverSettings.userDesign) {
+          storage.set('lerne_user_design', JSON.stringify(serverSettings.userDesign));
+        } else {
+          storage.remove('lerne_user_design');
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        set(updates);
+      }
+    },
+
+    saveCurrentSettingsToServer: async () => {
+      try {
+        const { getAccessToken } = await import('../utils/auth');
+        if (!getAccessToken()) return false;
+        const settings = collectUserSettings(get());
+        await api.post('/user/settings', settings);
+        return true;
+      } catch (e) {
+        console.warn('Manual settings sync failed:', e);
+        return false;
+      }
     },
 
     // --- Admin/API Settings (Fetched from Backend) ---

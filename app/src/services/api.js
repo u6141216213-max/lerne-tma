@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getAccessToken } from '../utils/auth';
+import { getAccessToken, getAuthSession, saveAuthSession, clearAuthSession } from '../utils/auth';
 import { isOfflineMode, resolveLocalRequest, prepareLocalDb } from './localDb';
 import { offlineApi } from './offlineApi';
 import { API_BASE_URL } from './apiConfig';
@@ -15,14 +15,115 @@ const axiosInstance = axios.create({
 axiosInstance.interceptors.request.use((config) => {
   const token = getAccessToken();
   if (token && !config.headers?.Authorization) {
-    config.headers = { ...config.headers, Authorization: `Bearer ${token}` };
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
   }
   if (config.method && config.method.toLowerCase() === 'get') {
-    const separator = config.url.includes('?') ? '&' : '?';
-    config.url = `${config.url}${separator}_t=${Date.now()}`;
+    if (/_t=\d+/.test(config.url)) {
+      config.url = config.url.replace(/_t=\d+/, `_t=${Date.now()}`);
+    } else {
+      const separator = config.url.includes('?') ? '&' : '?';
+      config.url = `${config.url}${separator}_t=${Date.now()}`;
+    }
   }
   return config;
 });
+
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error?.config;
+    if (!originalRequest) return Promise.reject(error);
+
+    const is401 = error.response && error.response.status === 401;
+    const url = originalRequest.url || '';
+    const isAuthEndpoint = 
+      url.includes('/auth/v2/refresh') ||
+      url.includes('/auth/v2/email-password/login') ||
+      url.includes('/auth/v2/email-password/register') ||
+      url.includes('/auth/v2/challenges');
+
+    if (!is401 || isAuthEndpoint || originalRequest._retry) {
+      return Promise.reject(error);
+    }
+
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      })
+        .then((newToken) => {
+          if (typeof originalRequest.headers?.set === 'function') {
+            originalRequest.headers.set('Authorization', `Bearer ${newToken}`);
+          } else {
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          }
+          return axiosInstance(originalRequest);
+        })
+        .catch((err) => Promise.reject(err));
+    }
+
+    originalRequest._retry = true;
+    isRefreshing = true;
+
+    const session = getAuthSession();
+    const refreshToken = session?.refresh_token;
+
+    if (!refreshToken) {
+      isRefreshing = false;
+      clearAuthSession();
+      processQueue(error, null);
+      return Promise.reject(error);
+    }
+
+    try {
+      const response = await axios.post(`${baseURL}/auth/v2/refresh`, {
+        refresh_token: refreshToken,
+      }, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
+
+      const newSession = response.data;
+      saveAuthSession(newSession);
+      const newToken = newSession.access_token;
+
+      if (typeof originalRequest.headers?.set === 'function') {
+        originalRequest.headers.set('Authorization', `Bearer ${newToken}`);
+      } else {
+        originalRequest.headers = originalRequest.headers || {};
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+      }
+
+      processQueue(null, newToken);
+      return axiosInstance(originalRequest);
+    } catch (refreshErr) {
+      processQueue(refreshErr, null);
+      clearAuthSession();
+      try {
+        const { useUiStore } = await import('../store/useUiStore');
+        useUiStore.getState().setIsAuthModalOpen(true);
+      } catch { /* ignore */ }
+      return Promise.reject(refreshErr);
+    } finally {
+      isRefreshing = false;
+    }
+  }
+);
 
 // Проксируем методы Axios для поддержки офлайн-режима и автоматического фоллбека
 const api = new Proxy(axiosInstance, {

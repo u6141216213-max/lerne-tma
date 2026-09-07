@@ -128,6 +128,10 @@ export const createDeckSlice = (set, get) => ({
         return;
       } catch (err) {
         lastError = err;
+        const status = err?.response?.status || err?.status;
+        if (status === 401 || status === 403) {
+          break;
+        }
         if (attempt < attempts) {
           await new Promise(r => setTimeout(r, 400 * attempt));
         }

@@ -53,6 +53,8 @@ function AppContent() {
   const activeTutorial = useUiStore(state => state.activeTutorial);
   const setActiveTutorial = useUiStore(state => state.setActiveTutorial);
   const toast = useUiStore(state => state.toast);
+  const userProfile = useUiStore(state => state.userProfile);
+  const currentUserId = userProfile?.user_id ?? getUserId();
   const isCardActionModalOpen = useUiStore(state => state.isCardActionModalOpen);
   const setIsCardActionModalOpen = useUiStore(state => state.setIsCardActionModalOpen);
   const actionCard = useUiStore(state => state.actionCard);
@@ -285,7 +287,7 @@ function AppContent() {
       {isNewDeckModalOpen && <DeckModals />}
       {isRenameModalOpen && <RenameDeckModal />}
       {isCollaboratorsModalOpen && <CollaboratorsModal />}
-      {isSettingsOpen && <SettingsModal userId={USER_ID} />}
+      {isSettingsOpen && <SettingsModal userId={currentUserId} />}
       
       {importShareId && (
         <ImportModal

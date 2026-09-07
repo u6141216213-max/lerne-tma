@@ -14,6 +14,28 @@ export const getLocalDb = () => {
   return database;
 };
 
+export const closeLocalDb = (userId) => {
+  const targetId = userId != null ? String(userId) : String(getUserId());
+  if (databases.has(targetId)) {
+    const database = databases.get(targetId);
+    try {
+      database.close();
+    } catch { /* ignore */ }
+    databases.delete(targetId);
+    preparations.delete(database.name);
+  }
+};
+
+export const resetAllDatabases = () => {
+  for (const [, database] of databases.entries()) {
+    try {
+      database.close();
+    } catch { /* ignore */ }
+  }
+  databases.clear();
+  preparations.clear();
+};
+
 export async function prepareLocalDb() {
   const database = getLocalDb();
   if (!preparations.has(database.name)) {

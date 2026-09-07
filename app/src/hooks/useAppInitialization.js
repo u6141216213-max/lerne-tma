@@ -212,6 +212,11 @@ export const useAppInitialization = (checkStartParam) => {
         return await requestFn();
       } catch (err) {
         lastError = err;
+        const status = err?.response?.status || err?.status;
+        if (status === 401 || status === 403) {
+          // Authentication errors should fail immediately without useless retries
+          break;
+        }
         if (attempt === attempts) break;
         console.warn(`${label} failed on attempt ${attempt}, retrying...`, err);
         await sleep(400 * attempt);
@@ -236,6 +241,12 @@ export const useAppInitialization = (checkStartParam) => {
       setDecksAndFolders(freshDecks, freshFolders);
       setAdminSettings(res.data.settings);
       setUserPrompts(res.data.prompts);
+
+      if (res.data.user_settings && Object.keys(res.data.user_settings).length > 0) {
+        useSettingsStore.getState().syncUserSettingsFromServer(res.data.user_settings);
+      } else {
+        useSettingsStore.getState().saveCurrentSettingsToServer().catch(() => {});
+      }
 
       if (res.data.user_info && res.data.user_info.user_id) {
         const sUser = res.data.user_info;
@@ -297,9 +308,14 @@ export const useAppInitialization = (checkStartParam) => {
       }
     } catch (err) {
       console.error("Init Data Error:", err);
-      const decksNow = useDeckStore.getState().decks;
-      if (!decksNow || decksNow.length === 0) {
-        showToast(tr("Ошибка загрузки данных."));
+      const isAuthError = err?.response?.status === 401 || err?.status === 401;
+      if (isAuthError) {
+        useUiStore.getState().setIsAuthModalOpen(true, tr('Войдите, чтобы открыть свои колоды и прогресс'));
+      } else {
+        const decksNow = useDeckStore.getState().decks;
+        if (!decksNow || decksNow.length === 0) {
+          showToast(tr("Ошибка загрузки данных."));
+        }
       }
     } finally {
       useDeckStore.setState({ isFetchingDecks: false });

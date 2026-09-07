@@ -210,10 +210,20 @@ def get_init_data(user_id: int = Depends(get_user_id)):
             }
     except Exception: pass
 
+    # Get user settings
+    user_settings = {}
+    try:
+        import json
+        us = models.TMASetting.get_or_none(models.TMASetting.key == f"USER_SETTINGS_{user_id}")
+        if us and us.value:
+            user_settings = json.loads(us.value)
+    except Exception: pass
+
     return {
         "decks": decks,
         "folders": folders,
         "settings": settings,
+        "user_settings": user_settings,
         "prompts": prompts,
         "user_info": user_info
     }

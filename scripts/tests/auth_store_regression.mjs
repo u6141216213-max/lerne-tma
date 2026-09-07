@@ -27,18 +27,36 @@ function fixture({ methods = ['email_password'], email = 'fixture@example.test' 
       return { data: { access_token: 'synthetic', refresh_token: 'synthetic' } };
     },
   };
+  let deckStoreResetCount = 0;
+  const closedDbUserIds = [];
+  let resetAllDatabasesCount = 0;
+  let currentUserId = null;
   const context = { create: createStore, tr: value => value, api,
-    getUserProfile: () => null, saveUserProfile() {}, saveAuthSession() {}, clearAuthSession() {},
+    getUserProfile: () => (currentUserId ? { user_id: currentUserId } : null),
+    saveUserProfile(p) { currentUserId = p?.user_id; },
+    saveAuthSession() {}, clearAuthSession() { currentUserId = null; },
+    getUserId: () => currentUserId,
+    closeLocalDb: (id) => { closedDbUserIds.push(id); },
+    resetAllDatabases: () => { resetAllDatabasesCount++; },
     storage: { remove() {} }, openExternalLink() {},
     useUiStore: { getState: () => ui, setState: value => Object.assign(ui, value) },
-    useDeckStore: { getState: () => ({ async fetchDecks() {}, async fetchFolders() {} }) },
+    useDeckStore: { getState: () => ({
+      async fetchDecks() {},
+      async fetchFolders() {},
+      resetDeckStore: () => { deckStoreResetCount++; },
+    }) },
     sessionStorage: { getItem: key => pending.get(key), setItem: (key, value) => pending.set(key, value),
       removeItem: key => pending.delete(key) },
     setInterval: callback => { timers.set(++nextTimer, callback); return nextTimer; },
     clearInterval: id => timers.delete(id), window: {},
   };
   vm.runInNewContext(`${source}\nglobalThis.subject = useAuthStore;`, context);
-  return { store: context.subject, api, ui, pending, timers, calls };
+  return { store: context.subject, api, ui, pending, timers, calls,
+    get deckStoreResetCount() { return deckStoreResetCount; },
+    get closedDbUserIds() { return closedDbUserIds; },
+    get resetAllDatabasesCount() { return resetAllDatabasesCount; },
+    set currentUserId(id) { currentUserId = id; },
+  };
 }
 
 test('registration offers linking without opening a second login', async () => {
@@ -117,3 +135,24 @@ test('expired and rejected challenges stop polling and allow retry', async () =>
   assert.equal(f.timers.size, 0);
   assert.equal(f.store.getState().isPolling, false);
 });
+
+test('logout isolates state: resets deck store, closes local database, and resets all databases', () => {
+  const f = fixture();
+  f.currentUserId = -999;
+  f.store.getState().logout();
+  assert.equal(f.deckStoreResetCount, 1);
+  assert.deepEqual(f.closedDbUserIds, [-999]);
+  assert.equal(f.resetAllDatabasesCount, 1);
+  assert.equal(f.store.getState().userProfile, null);
+});
+
+test('finishLogin isolates state when switching user accounts', async () => {
+  const f = fixture();
+  f.currentUserId = -999;
+  await f.store.getState().finishLogin({ access_token: 'tok', refresh_token: 'ref' });
+  // f.api.get('/auth/v2/me') returns user_id: -123 != -999
+  assert.equal(f.deckStoreResetCount, 1);
+  assert.deepEqual(f.closedDbUserIds, [-999]);
+  assert.equal(f.store.getState().userProfile.user_id, -123);
+});
+
