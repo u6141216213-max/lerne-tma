@@ -33,7 +33,10 @@ export const useAppInitialization = (checkStartParam) => {
       if (!getAccessToken()) {
         const miniAppData = window.Telegram?.WebApp?.initData;
         if (miniAppData) {
-          useAuthStore.getState().startProvider('telegram').catch(() => {});
+          // Do not race the initial /init request with the silent Telegram login.
+          // The first request otherwise may use a stale/missing legacy user id and
+          // leave the UI in the empty-decks state until the next reload.
+          await useAuthStore.getState().startProvider('telegram').catch(() => ({ success: false }));
         }
         // Only block if neither bearer token nor identified user exists
         if (!profile?.user_id) {

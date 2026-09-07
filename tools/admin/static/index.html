@@ -164,6 +164,9 @@
             <button onclick="startBatchFromSelection('ai')" title="Полная перегенерация всех карточек выбранных колод" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg border border-slate-700 flex items-center gap-1.5 shrink-0 transition">
               <i data-lucide="zap" class="w-3.5 h-3.5"></i> 🚀 Полная (<span class="selected-table-count">0</span>)
             </button>
+            <button onclick="deleteSelectedDecks()" title="Удалить все выбранные колоды и их карточки" class="px-3 py-2 bg-rose-600/30 hover:bg-rose-600/50 text-rose-200 text-xs font-bold rounded-lg border border-rose-500/40 flex items-center gap-1.5 shrink-0 transition shadow-sm">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5 text-rose-400"></i> 🗑️ Удалить (<span class="selected-table-count">0</span>)
+            </button>
           </div>
 
           <button onclick="clearUserFilter()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg border border-slate-700 flex items-center gap-1.5 shrink-0">
@@ -590,8 +593,8 @@
                 <h4 class="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
                   <i data-lucide="eye" class="w-4 h-4 text-indigo-400"></i> Результаты теста Dry-Run:
                 </h4>
-                <button onclick="controlActiveRegen('commit_dry_run')" class="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-95 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-500/20 flex items-center gap-1.5 transition">
-                  <i data-lucide="save" class="w-3.5 h-3.5"></i> Сохранить эти результаты в БД
+                <button id="btn-commit-dryrun-all" onclick="controlActiveRegen('commit_dry_run')" class="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-95 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-500/20 flex items-center gap-1.5 transition" title="Сохранить все сгенерированные тестовые карточки в БД и снять их с последующей генерации">
+                  <i data-lucide="save" class="w-3.5 h-3.5"></i> 💾 Добавить результаты в БД (снять с генерации)
                 </button>
               </div>
               <div id="dryrun-cards-grid" class="grid grid-cols-1 gap-3">
@@ -1340,8 +1343,15 @@
         <button onclick="closeModal('modal-folders-manager')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
 
-      <div class="flex items-center gap-3">
-        <input type="text" id="folder-search" onkeyup="renderFoldersList()" placeholder="Поиск папки (название, владелец)..." class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 flex-1">
+      <div class="flex items-center gap-3 flex-wrap">
+        <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 hover:border-slate-700 shrink-0" title="Выбрать все отфильтрованные папки">
+          <input type="checkbox" id="folder-table-select-all" onchange="toggleSelectAllFolders(this.checked)" class="w-4 h-4 text-indigo-600 rounded cursor-pointer">
+          <span class="text-[11px] font-semibold text-slate-300">Все</span>
+        </label>
+        <input type="text" id="folder-search" onkeyup="renderFoldersList()" placeholder="Поиск папки (название, владелец)..." class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 flex-1 min-w-[180px]">
+        <button id="btn-delete-selected-folders" onclick="deleteSelectedFolders()" class="hidden px-3 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg border border-rose-500/30 flex items-center gap-1.5 shrink-0 transition shadow-md shadow-rose-500/20" title="Удалить выбранные папки и их колоды">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 🗑️ Удалить (<span id="selected-folders-count">0</span>)
+        </button>
         <button onclick="loadAdminFolders()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg border border-slate-700 text-slate-300 flex items-center gap-1.5 shrink-0">
           <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Обновить
         </button>
@@ -2742,9 +2752,45 @@
 
     async function deleteDeck(deckId) {
       if (!confirm(`Удалить колоду #${deckId}?`)) return;
-      await fetch(`/api/admin/decks/${deckId}`, { method: 'DELETE' });
-      removeStagedDeck(deckId);
-      loadDecks();
+      try {
+        const res = await fetch(`/api/admin/decks/${deckId}`, { method: 'DELETE' });
+        if (res.ok) {
+          removeStagedDeck(deckId);
+          loadDecks();
+        } else {
+          const err = await res.json();
+          alert("Ошибка при удалении колоды: " + (err.detail || "Неизвестная ошибка"));
+        }
+      } catch (err) {
+        alert("Ошибка сети при удалении колоды: " + err);
+      }
+    }
+
+    async function deleteSelectedDecks() {
+      const checkedBoxes = document.querySelectorAll('.deck-row-checkbox:checked');
+      if (checkedBoxes.length === 0) return;
+      const deckIds = Array.from(checkedBoxes).map(cb => String(cb.value));
+      if (!confirm(`Вы действительно хотите удалить ${deckIds.length} выбранных колод и все карточки в них?`)) return;
+
+      try {
+        const res = await fetch('/api/admin/decks/batch-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deck_ids: deckIds })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          deckIds.forEach(id => removeStagedDeck(id));
+          const selectAll = document.getElementById('deck-table-select-all');
+          if (selectAll) selectAll.checked = false;
+          onDeckRowCheckboxChange();
+          loadDecks();
+        } else {
+          alert("Ошибка при массовом удалении колод: " + (data.detail || "Неизвестная ошибка"));
+        }
+      } catch (err) {
+        alert("Сетевая ошибка при удалении колод: " + err);
+      }
     }
 
     function selectAllAssignUsers(checked) {
@@ -2854,27 +2900,30 @@
 
         return `
           <div class="glass p-3.5 rounded-xl border border-slate-800 hover:border-slate-700 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/60">
-            <div class="space-y-1.5 flex-1 min-w-0">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="w-3 h-3 rounded-full shrink-0" style="background-color: ${f.color}"></span>
-                <span class="font-bold text-sm text-white truncate">${f.name}</span>
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950/60 text-indigo-300 border border-indigo-500/30">
-                  📁 ${f.deck_count} колод • 🗂️ ${f.cards_count} карт.
-                </span>
-                <span class="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-slate-800 text-slate-400">
-                  ${f.target_language}
-                </span>
-                ${isDefault 
-                  ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">★ ДЕФОЛТНАЯ</span>` 
-                  : ''}
-              </div>
+            <div class="flex items-start gap-3 flex-1 min-w-0">
+              <input type="checkbox" class="folder-row-checkbox w-4 h-4 text-indigo-600 rounded cursor-pointer shrink-0 mt-1" value="${f.id}" onchange="onFolderRowCheckboxChange()">
+              <div class="space-y-1.5 flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="w-3 h-3 rounded-full shrink-0" style="background-color: ${f.color}"></span>
+                  <span class="font-bold text-sm text-white truncate">${f.name}</span>
+                  <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950/60 text-indigo-300 border border-indigo-500/30">
+                    📁 ${f.deck_count} колод • 🗂️ ${f.cards_count} карт.
+                  </span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-slate-800 text-slate-400">
+                    ${f.target_language}
+                  </span>
+                  ${isDefault 
+                    ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">★ ДЕФОЛТНАЯ</span>` 
+                    : ''}
+                </div>
 
-              <div class="flex items-center gap-2 text-xs text-slate-400">
-                ${avatarEl}
-                <span class="truncate">Владелец: <b class="text-slate-200">${f.user_name}</b> <span class="font-mono text-[11px] text-slate-500">(ID: ${f.user_id})</span></span>
-              </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  ${avatarEl}
+                  <span class="truncate">Владелец: <b class="text-slate-200">${f.user_name}</b> <span class="font-mono text-[11px] text-slate-500">(ID: ${f.user_id})</span></span>
+                </div>
 
-              ${decksBadges ? `<div class="flex items-center gap-1.5 flex-wrap pt-0.5">${decksBadges}</div>` : ''}
+                ${decksBadges ? `<div class="flex items-center gap-1.5 flex-wrap pt-0.5">${decksBadges}</div>` : ''}
+              </div>
             </div>
 
             <div class="flex items-center gap-2 shrink-0 self-end sm:self-center flex-wrap sm:flex-nowrap">
@@ -2895,12 +2944,79 @@
                 class="px-3 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1">
                 👥 Раздать
               </button>
+              <button onclick="deleteAdminFolder(${f.id}, '${safeName}', ${f.deck_count})" 
+                class="px-3 py-1.5 text-xs font-bold rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 transition flex items-center gap-1"
+                title="Удалить папку и все входящие в неё колоды">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Удалить
+              </button>
             </div>
           </div>
         `;
       }).join('');
       
       lucide.createIcons();
+      onFolderRowCheckboxChange();
+    }
+
+    function onFolderRowCheckboxChange() {
+      const checked = document.querySelectorAll('.folder-row-checkbox:checked');
+      const btn = document.getElementById('btn-delete-selected-folders');
+      const countEl = document.getElementById('selected-folders-count');
+      if (btn && countEl) {
+        countEl.innerText = checked.length;
+        if (checked.length > 0) {
+          btn.classList.remove('hidden');
+        } else {
+          btn.classList.add('hidden');
+        }
+      }
+    }
+
+    function toggleSelectAllFolders(checked) {
+      document.querySelectorAll('.folder-row-checkbox').forEach(cb => cb.checked = checked);
+      onFolderRowCheckboxChange();
+    }
+
+    async function deleteAdminFolder(folderId, folderName, deckCount) {
+      if (!confirm(`Вы действительно хотите удалить папку "${folderName}" и все входящие в неё колоды (${deckCount} шт.)?`)) return;
+      try {
+        const res = await fetch(`/api/admin/folders/${folderId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) {
+          loadAdminFolders();
+          loadDecks();
+        } else {
+          alert("Ошибка при удалении папки: " + (data.detail || "Неизвестная ошибка"));
+        }
+      } catch (err) {
+        alert("Сетевая ошибка при удалении папки: " + err);
+      }
+    }
+
+    async function deleteSelectedFolders() {
+      const checked = document.querySelectorAll('.folder-row-checkbox:checked');
+      if (checked.length === 0) return;
+      const folderIds = Array.from(checked).map(cb => parseInt(cb.value, 10));
+      if (!confirm(`Вы действительно хотите удалить ${folderIds.length} выбранных папок и все входящие в них колоды?`)) return;
+      try {
+        const res = await fetch('/api/admin/folders/batch-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder_ids: folderIds })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          const selectAll = document.getElementById('folder-table-select-all');
+          if (selectAll) selectAll.checked = false;
+          onFolderRowCheckboxChange();
+          loadAdminFolders();
+          loadDecks();
+        } else {
+          alert("Ошибка при удалении папок: " + (data.detail || "Неизвестная ошибка"));
+        }
+      } catch (err) {
+        alert("Сетевая ошибка при удалении папок: " + err);
+      }
     }
 
     async function toggleDefaultFolder(folderId, newDefault) {
@@ -3426,6 +3542,17 @@
       }
     }
 
+    let committedDryRunCardIds = new Set();
+
+    function onCardCheckboxChange(cb) {
+      const cardId = Number(cb.value);
+      if (cb.checked) {
+        committedDryRunCardIds.delete(cardId);
+        const badge = cb.closest('label')?.querySelector('.committed-test-badge');
+        if (badge) badge.remove();
+      }
+    }
+
     async function loadDeckCardsForSelector(deckId) {
       const countEl = document.getElementById('deck-cards-selector-count');
       const listEl = document.getElementById('deck-cards-selector-list');
@@ -3447,14 +3574,21 @@
                </button>` 
             : `<span class="px-1.5 py-0.5 bg-amber-500/10 text-amber-400/80 rounded text-[10px]">⚠️ Без аудио</span>`;
 
+          const isCommitted = committedDryRunCardIds.has(Number(c.id));
+          const checkedAttr = isCommitted ? '' : 'checked';
+          const committedBadge = isCommitted 
+            ? `<span class="committed-test-badge ml-1.5 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px] font-bold border border-emerald-500/30">✅ В БД (снята)</span>` 
+            : '';
+
           listEl.innerHTML += `
             <label class="flex items-start gap-2.5 p-1.5 hover:bg-slate-900 rounded cursor-pointer border border-transparent hover:border-slate-800">
-              <input type="checkbox" class="card-select-checkbox w-3.5 h-3.5 mt-0.5 text-indigo-600 rounded" value="${c.id}" checked>
+              <input type="checkbox" class="card-select-checkbox w-3.5 h-3.5 mt-0.5 text-indigo-600 rounded" value="${c.id}" ${checkedAttr} onchange="onCardCheckboxChange(this)">
               <div class="flex-1 min-w-0 flex items-center justify-between gap-2">
                 <div class="truncate">
                   <span class="text-indigo-400 font-bold">#${c.position}</span>
                   <span class="text-white font-medium ml-1">${c.front || '(пусто)'}</span>
                   ${c.back ? `<span class="text-slate-400 text-[11px] ml-1.5">— ${c.back}</span>` : ''}
+                  ${committedBadge}
                 </div>
                 <div class="shrink-0">
                   ${audioBadge}
@@ -3738,7 +3872,9 @@
       }
 
       const uncheckedBoxes = document.querySelectorAll('.card-select-checkbox:not(:checked)');
-      const excludedCardIds = Array.from(uncheckedBoxes).map(cb => parseInt(cb.value, 10));
+      const excludedCardSet = new Set(Array.from(uncheckedBoxes).map(cb => parseInt(cb.value, 10)));
+      committedDryRunCardIds.forEach(id => excludedCardSet.add(id));
+      const excludedCardIds = Array.from(excludedCardSet);
       const skipCompleted = document.getElementById('regen-skip-completed')?.checked || false;
       const selectedRate = document.getElementById('regen-rate-select')?.value || '+0%';
 
@@ -3786,7 +3922,9 @@
       }
 
       const uncheckedBoxes = document.querySelectorAll('.card-select-checkbox:not(:checked)');
-      const excludedCardIds = Array.from(uncheckedBoxes).map(cb => parseInt(cb.value, 10));
+      const excludedCardSet = new Set(Array.from(uncheckedBoxes).map(cb => parseInt(cb.value, 10)));
+      committedDryRunCardIds.forEach(id => excludedCardSet.add(id));
+      const excludedCardIds = Array.from(excludedCardSet);
       const selectedVoice = document.getElementById('regen-voice-select')?.value || 'de-DE-KatjaNeural';
       const selectedRate = document.getElementById('regen-rate-select')?.value || '+0%';
       const skipCompleted = document.getElementById('regen-skip-completed')?.checked || false;
@@ -3847,6 +3985,8 @@
 
       const skipCompleted = document.getElementById('regen-skip-completed')?.checked || false;
       const selectedRate = document.getElementById('regen-rate-select')?.value || '+0%';
+
+      committedDryRunCardIds.forEach(id => globalBatchExcludedCards.add(id));
 
       const options = {
         deck_ids: stagedIds,
@@ -3918,6 +4058,8 @@
       const skipCompleted = document.getElementById('regen-skip-completed')?.checked || false;
       const isNoAudio = (selectedVoice === 'none');
 
+      committedDryRunCardIds.forEach(id => globalBatchExcludedCards.add(id));
+
       const options = {
         deck_ids: stagedIds,
         dry_run: isDryRun,
@@ -3982,6 +4124,85 @@
     }
 
 
+    function markDryRunCardsCommitted(cardIds) {
+      if (!cardIds || cardIds.length === 0) return;
+      cardIds.forEach(id => committedDryRunCardIds.add(Number(id)));
+
+      // 1. In Single Deck Studio: uncheck these cards in #deck-cards-selector-list and add badge
+      cardIds.forEach(id => {
+        const cb = document.querySelector(`.card-select-checkbox[value="${id}"]`);
+        if (cb) {
+          cb.checked = false;
+          const parentLabel = cb.closest('label');
+          if (parentLabel && !parentLabel.querySelector('.committed-test-badge')) {
+            const badge = document.createElement('span');
+            badge.className = 'committed-test-badge ml-1.5 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px] font-bold border border-emerald-500/30';
+            badge.innerText = '✅ В БД (снята)';
+            const textContainer = parentLabel.querySelector('.truncate');
+            if (textContainer) textContainer.appendChild(badge);
+          }
+        }
+      });
+
+      // 2. In Batch Studio: add to globalBatchExcludedCards
+      cardIds.forEach(id => globalBatchExcludedCards.add(Number(id)));
+      const exclCardsLbl = document.getElementById('folder-excluded-cards-lbl');
+      if (exclCardsLbl) {
+        exclCardsLbl.innerText = `Исключено карточек: ${globalBatchExcludedCards.size}`;
+      }
+
+      // 3. Update preview cards UI in dryrun-cards-grid
+      cardIds.forEach(id => {
+        const btn = document.getElementById(`btn-dryrun-commit-${id}`);
+        if (btn) {
+          btn.outerHTML = `
+            <span class="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 rounded border border-emerald-500/30 inline-flex items-center gap-1">
+              <i data-lucide="check-check" class="w-3 h-3"></i> В БД (снята)
+            </span>
+          `;
+        }
+      });
+      if (window.lucide && typeof lucide.createIcons === 'function') {
+        lucide.createIcons();
+      }
+    }
+
+    async function commitSingleDryRunCard(cardId, btnEl) {
+      if (btnEl) btnEl.disabled = true;
+      const numId = Number(cardId);
+      if (isBatchStudioMode) {
+        if (!activeBatchTaskId) return;
+        try {
+          const res = await fetch(`/api/admin/decks/batch/${activeBatchTaskId}/control`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'commit_dry_run', card_ids: [numId] })
+          });
+          const data = await res.json();
+          const committed = data.committed_card_ids || [numId];
+          markDryRunCardsCommitted(committed);
+        } catch (e) {
+          console.error("Single dry run commit error", e);
+          if (btnEl) btnEl.disabled = false;
+        }
+      } else {
+        if (!activeRegenDeckId) return;
+        try {
+          const res = await fetch(`/api/admin/decks/${activeRegenDeckId}/regen-control`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'commit_dry_run', card_ids: [numId] })
+          });
+          const data = await res.json();
+          const committed = data.committed_card_ids || [numId];
+          markDryRunCardsCommitted(committed);
+        } catch (e) {
+          console.error("Single dry run commit error", e);
+          if (btnEl) btnEl.disabled = false;
+        }
+      }
+    }
+
     async function controlActiveRegen(action) {
       if (isBatchStudioMode) {
         if (!activeBatchTaskId) return;
@@ -3993,8 +4214,16 @@
           });
           const data = await res.json();
           if (action === 'commit_dry_run') {
-            alert(data.message || `Успешно сохранено ${data.committed_count} карточек в БД!`);
-            document.getElementById('dryrun-preview-section').classList.add('hidden');
+            const committed = data.committed_card_ids || (window.currentDryRunResults || []).map(c => c.card_id);
+            markDryRunCardsCommitted(committed);
+            alert(data.message || `Успешно сохранено ${data.committed_count || committed.length} карточек в БД! Они сняты с последующей генерации.`);
+            const commitAllBtn = document.getElementById('btn-commit-dryrun-all');
+            if (commitAllBtn) {
+              commitAllBtn.innerHTML = `<i data-lucide="check-check" class="w-3.5 h-3.5"></i> ✅ Все в БД (сняты с генерации)`;
+              commitAllBtn.disabled = true;
+              commitAllBtn.className = "px-3.5 py-1.5 bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-1.5 opacity-90";
+              if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+            }
           }
         } catch (e) {
           console.error("Batch control error", e);
@@ -4010,8 +4239,16 @@
           const data = await res.json();
           if (action === 'commit_dry_run') {
             stopDryRunAudio();
-            alert(data.message || `Успешно сохранено ${data.committed_count} карточек в БД!`);
-            document.getElementById('dryrun-preview-section').classList.add('hidden');
+            const committed = data.committed_card_ids || (window.currentDryRunResults || []).map(c => c.card_id);
+            markDryRunCardsCommitted(committed);
+            alert(data.message || `Успешно сохранено ${data.committed_count || committed.length} карточек в БД! Они сняты с последующей генерации.`);
+            const commitAllBtn = document.getElementById('btn-commit-dryrun-all');
+            if (commitAllBtn) {
+              commitAllBtn.innerHTML = `<i data-lucide="check-check" class="w-3.5 h-3.5"></i> ✅ Все в БД (сняты с генерации)`;
+              commitAllBtn.disabled = true;
+              commitAllBtn.className = "px-3.5 py-1.5 bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-1.5 opacity-90";
+              if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+            }
           }
         } catch (e) {
           console.error("Regen control error", e);
@@ -4102,14 +4339,28 @@
       window.currentDryRunResults = results || [];
 
       const esc = typeof escapeHtml === 'function' ? escapeHtml : (v => String(v ?? ''));
+      const allCommitted = results && results.length > 0 && results.every(c => committedDryRunCardIds.has(Number(c.card_id)));
+      const commitAllBtn = document.getElementById('btn-commit-dryrun-all');
+      if (commitAllBtn) {
+        if (allCommitted) {
+          commitAllBtn.innerHTML = `<i data-lucide="check-check" class="w-3.5 h-3.5"></i> ✅ Все в БД (сняты с генерации)`;
+          commitAllBtn.disabled = true;
+          commitAllBtn.className = "px-3.5 py-1.5 bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-1.5 opacity-90";
+        } else {
+          commitAllBtn.innerHTML = `<i data-lucide="save" class="w-3.5 h-3.5"></i> 💾 Добавить результаты в БД (снять с генерации)`;
+          commitAllBtn.disabled = false;
+          commitAllBtn.className = "px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-95 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-500/20 flex items-center gap-1.5 transition";
+        }
+      }
 
       cardsGrid.innerHTML = (results || []).map((c, i) => {
         const isPlaying = (currentPlayingDryRunIndex === i);
         const hasAudio = !!(c.audio_path && c.audio_path.trim());
         const safeDeckName = c.deck_name ? esc(c.deck_name) : (c.deck_id ? '#' + esc(c.deck_id) : '');
+        const isCommitted = committedDryRunCardIds.has(Number(c.card_id));
         return `
           <div class="glass p-4 rounded-2xl border border-indigo-500/30 bg-slate-900/90 space-y-2.5 shadow-lg">
-            <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-2 flex-wrap gap-2">
               <div>
                 <span class="font-bold text-xs uppercase text-indigo-400">
                   ${isBatch ? `Тест #${i + 1}` : `Тестовая карточка #${i + 1} (ID: ${esc(c.card_id)})`}
@@ -4118,7 +4369,7 @@
                   <span class="text-xs text-slate-300 font-semibold ml-2">📦 ${safeDeckName}</span>
                 ` : ''}
               </div>
-              <div class="flex items-center gap-1.5">
+              <div class="flex items-center gap-1.5 flex-wrap">
                 ${hasAudio ? `
                   <span class="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 rounded border border-emerald-500/30 inline-flex items-center gap-1" title="Аудио сгенерировано">
                     <i data-lucide="check" class="w-3 h-3"></i> Аудио готово
@@ -4127,6 +4378,15 @@
                 ${c.level ? `
                   <span class="px-2 py-0.5 text-[10px] font-bold bg-indigo-500/20 text-indigo-300 rounded border border-indigo-500/30">${esc(c.level)}</span>
                 ` : ''}
+                ${isCommitted ? `
+                  <span class="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 rounded border border-emerald-500/30 inline-flex items-center gap-1">
+                    <i data-lucide="check-check" class="w-3 h-3"></i> В БД (снята)
+                  </span>
+                ` : `
+                  <button type="button" onclick="commitSingleDryRunCard('${esc(c.card_id)}', this)" id="btn-dryrun-commit-${esc(c.card_id)}" class="px-2.5 py-0.5 text-[10px] font-bold bg-indigo-600/30 hover:bg-indigo-600 text-indigo-200 hover:text-white rounded border border-indigo-500/40 inline-flex items-center gap-1 transition shadow-sm" title="Добавить эту карточку в БД и снять с последующей генерации">
+                    <i data-lucide="plus-circle" class="w-3 h-3"></i> 💾 В БД (снять)
+                  </button>
+                `}
               </div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">

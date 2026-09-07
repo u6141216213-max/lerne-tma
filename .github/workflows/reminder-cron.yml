@@ -13,4 +13,6 @@ jobs:
       - name: Ping TMA Reminders Endpoint
         run: |
           curl --fail-with-body --show-error --location \
-            -X POST https://tma-amber.vercel.app/api/bot/cron-reminders
+            -X POST \
+            -H "X-Internal-Cron-Token: ${{ secrets.REMINDER_CRON_TOKEN }}" \
+            https://tma-amber.vercel.app/api/bot/cron-reminders

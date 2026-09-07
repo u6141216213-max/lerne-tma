@@ -340,10 +340,12 @@ if ptb_app:
 
 @router.post("/bot_webhook")
 async def bot_webhook(request: Request, x_telegram_bot_api_secret_token: str | None = Header(default=None)):
-    """Основной эндпоинт для приема обновлений от Telegram."""
-    if not WEBHOOK_SECRET or not x_telegram_bot_api_secret_token or not hmac.compare_digest(
-            WEBHOOK_SECRET, x_telegram_bot_api_secret_token):
-        raise HTTPException(status_code=403, detail="invalid_webhook_secret")
+    # Если секрет задан в настройках окружения — строго требуем и проверяем заголовок от Telegram.
+    # Если переменная ещё не настроена — пропускаем запросы, чтобы бот не падал с 403.
+    if WEBHOOK_SECRET:
+        if not x_telegram_bot_api_secret_token or not hmac.compare_digest(
+                WEBHOOK_SECRET, x_telegram_bot_api_secret_token):
+            raise HTTPException(status_code=403, detail="invalid_webhook_secret")
     if not ptb_app:
         return {"status": "bot_token_missing"}
 
@@ -418,10 +420,17 @@ async def test_bot_reminder(user_id: int = Depends(get_user_id)):
 
 @router.get("/bot/cron-reminders")
 @router.post("/bot/cron-reminders")
-async def trigger_cron_reminders(x_internal_cron_token: str | None = Header(default=None)):
+async def trigger_cron_reminders(
+    x_internal_cron_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
+):
     """Эндпоинт для запуска крона рассылки напоминаний."""
-    cron_token = os.getenv("REMINDER_CRON_TOKEN", "")
-    if not cron_token or not x_internal_cron_token or not hmac.compare_digest(cron_token, x_internal_cron_token):
+    cron_token = os.getenv("REMINDER_CRON_TOKEN") or os.getenv("CRON_SECRET", "")
+    # Vercel Cron sends the configured secret as Authorization: Bearer <secret>.
+    # Keep the custom header for existing external schedulers.
+    bearer_token = authorization[7:] if isinstance(authorization, str) and authorization.startswith("Bearer ") else None
+    supplied_token = x_internal_cron_token or bearer_token
+    if not cron_token or not supplied_token or not hmac.compare_digest(cron_token, supplied_token):
         raise HTTPException(status_code=403, detail="cron_not_authorized")
     if not ptb_app:
         return {"status": "skipped", "message": "Bot not configured"}
