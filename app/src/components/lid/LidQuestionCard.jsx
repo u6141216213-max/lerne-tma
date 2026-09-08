@@ -173,16 +173,6 @@ export const LidQuestionCard = ({
             exit={{ opacity: 0, rotateY: 70 }}
             transition={{ duration: 0.28, ease: 'easeOut' }}
           >
-            {/* Top Meta: Number & Category */}
-            <div className="lid-question-meta-row">
-              <div className="lid-q-number-badge">
-                <span>{tr("Вопрос")}{' '}{examIndex}{' '}{tr("из")}{' '}{totalQuestions}</span>
-              </div>
-              <div className="lid-q-category-pill" title={question.category}>
-                <span>{question.category}</span>
-              </div>
-            </div>
-
             {/* Optional Image with Interactive Height Resize */}
             {imgSrc && (
               <>

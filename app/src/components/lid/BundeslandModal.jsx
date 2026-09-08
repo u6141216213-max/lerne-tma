@@ -61,7 +61,7 @@ export const BundeslandModal = ({ isOpen, onClose, onConfirm }) => {
 
   return (
     <AnimatePresence>
-      <div className="modal-overlay" onClick={onClose} style={{ zIndex: 10000 }}>
+      <div className="lid-modal-overlay" onClick={onClose}>
         <motion.div
           className="lid-modal-card glass"
           onClick={(e) => e.stopPropagation()}
@@ -149,7 +149,6 @@ export const BundeslandModal = ({ isOpen, onClose, onConfirm }) => {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="lid-search-input"
-                  autoFocus
                 />
                 {searchQuery && (
                   <button
@@ -184,7 +183,10 @@ export const BundeslandModal = ({ isOpen, onClose, onConfirm }) => {
                       <div className="lid-land-item-info">
                         <div className="lid-land-name-de">{land.nameDe}</div>
                         <div className="lid-land-name-ru">{land.nameRu}</div>
-                        <div className="lid-land-capital">{land.capital}</div>
+                        <div className="lid-land-capital">
+                          <MapPin size={11} style={{ display: 'inline', marginRight: 3, verticalAlign: 'middle' }} />
+                          <span>{land.capital}</span>
+                        </div>
                       </div>
                       {isSelected && (
                         <div className="lid-land-check-badge" style={{ background: land.color || '#38bdf8' }}>

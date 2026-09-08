@@ -250,9 +250,19 @@ export const useAppInitialization = (checkStartParam) => {
     }
     useDeckStore.setState({ isFetchingDecks: true });
     try {
-      const res = await requestWithRetry(() => api.get('/init'), 'Init data load');
-      const freshDecks = res.data.decks || [];
-      const freshFolders = res.data.folders || [];
+      let res = await requestWithRetry(() => api.get('/init'), 'Init data load');
+      let freshDecks = res.data.decks || [];
+      let freshFolders = res.data.folders || [];
+
+      // A cold serverless/database start can briefly return a successful but
+      // empty /init response while starter data is being provisioned. Do one
+      // bounded refetch so the first launch does not require a browser reload.
+      if (freshDecks.length === 0 && freshFolders.length === 0 && getUserId()) {
+        await sleep(700);
+        res = await requestWithRetry(() => api.get('/init'), 'Init data refetch');
+        freshDecks = res.data.decks || [];
+        freshFolders = res.data.folders || [];
+      }
       setDecksAndFolders(freshDecks, freshFolders);
       setAdminSettings(res.data.settings);
       setUserPrompts(res.data.prompts);

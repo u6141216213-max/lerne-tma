@@ -1243,23 +1243,24 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 38px;
+  min-height: 44px;
 }
 
 .lid-nav-bamf-num-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.15rem;
+  font-size: 1.55rem;
   font-weight: 800;
-  color: #c084fc;
-  padding: 4px 12px;
-  border-radius: 8px;
-  background: rgba(168, 85, 247, 0.14);
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  color: #f3e8ff;
+  padding: 5px 16px;
+  border-radius: 12px;
+  background: rgba(168, 85, 247, 0.22);
+  border: 1.5px solid rgba(192, 132, 252, 0.55);
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.35);
   letter-spacing: 0.5px;
   user-select: none;
-  animation: lidNumberPop 0.2s ease-out;
+  animation: lidNumberPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes lidNumberPop {
@@ -1632,21 +1633,40 @@
 /* ---------------------------------------------------------
    Bundesland Selection Modal
    --------------------------------------------------------- */
+.lid-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 13, 22, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 12px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .lid-modal-card {
-  width: 92%;
+  width: 100%;
   max-width: 520px;
-  max-height: calc(100vh - 32px);
-  max-height: calc(100dvh - 32px);
+  height: min(88vh, 720px);
+  height: min(88dvh, 720px);
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
   margin: auto;
   box-sizing: border-box;
-  border-radius: 20px;
-  background: rgba(15, 23, 42, 0.94);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 22px;
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65), 0 0 30px rgba(56, 189, 248, 0.12);
 }
 
 .lid-modal-header {
@@ -1854,35 +1874,44 @@
 
 .lid-lands-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding-right: 2px;
+  padding-right: 4px;
+  padding-bottom: 6px;
   flex: 1;
-  min-height: 0;
+  min-height: 180px;
+}
+
+@media (max-width: 360px) {
+  .lid-lands-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .lid-land-item {
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(30, 41, 59, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(30, 41, 59, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 6px;
   position: relative;
-  transition: all 0.2s ease;
+  transition: all 0.18s ease;
+  min-height: 80px;
 }
 
 .lid-land-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .lid-land-item.selected {
-  background: rgba(56, 189, 248, 0.15);
-  border-width: 1.5px;
+  background: rgba(56, 189, 248, 0.18);
+  border-color: #38bdf8;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.3);
 }
 
 .lid-land-item-top {
@@ -1892,13 +1921,17 @@
 }
 
 .lid-land-symbol {
-  font-size: 1.3rem;
+  font-size: 1.5rem;
+  line-height: 1;
 }
 
 .lid-land-code-tag {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 800;
   color: #94a3b8;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 6px;
 }
 
 .lid-land-item-info {
@@ -1907,22 +1940,25 @@
 }
 
 .lid-land-name-de {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 700;
-  color: #ffffff;
+  color: #f8fafc;
   line-height: 1.25;
 }
 
 .lid-land-name-ru {
-  font-size: 0.72rem;
-  color: #93c5fd;
+  font-size: 0.8rem;
+  color: #94a3b8;
   line-height: 1.2;
+  margin-top: 2px;
 }
 
 .lid-land-capital {
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   color: #64748b;
-  margin-top: 2px;
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
 }
 
 .lid-land-check-badge {

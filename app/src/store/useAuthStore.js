@@ -3,7 +3,7 @@ import { tr } from '../i18n/locale';
 import api from '../services/api';
 import { getUserProfile, saveUserProfile, saveAuthSession, clearAuthSession, getUserId, storage } from '../utils/auth';
 import { closeLocalDb, resetAllDatabases } from '../services/localDb';
-import { openExternalLink } from '../utils/platform';
+import { openExternalLink, prepareExternalLink } from '../utils/platform';
 import { useUiStore } from './useUiStore';
 import { useDeckStore } from './useDeckStore';
 
@@ -103,6 +103,10 @@ export const useAuthStore = create((set, get) => ({
   startProvider: async (provider, purpose = 'login', recovery = false) => {
     if (get().isStarting || get().isPolling) return { success: false };
     set({ isStarting: true, authError: null });
+    // Preserve the click's user activation before the challenge request.
+    const preparedWindow = provider === 'telegram' || provider === 'google'
+      ? prepareExternalLink()
+      : null;
     try {
       const miniAppData = window.Telegram?.WebApp?.initData;
       if (provider === 'telegram' && purpose === 'login' && miniAppData && !recovery) {
@@ -116,9 +120,12 @@ export const useAuthStore = create((set, get) => ({
       savePending(pending);
       set({ isPolling: true, authError: null });
       get().beginPolling();
-      openExternalLink(response.data.authorization_url);
+      openExternalLink(response.data.authorization_url, preparedWindow);
       return { success: true };
     } catch (error) {
+      try {
+        if (preparedWindow && !preparedWindow.closed) preparedWindow.close();
+      } catch { /* ignore popup cleanup errors */ }
       const message = authMessage(error, tr('Не удалось начать вход. Попробуйте ещё раз.'));
       set({ isPolling: false, authError: message });
       useUiStore.getState().showToast(message, 'error');

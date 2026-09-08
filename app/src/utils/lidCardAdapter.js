@@ -139,15 +139,34 @@ export const transformCardToExamQuestion = (card, examIndex = 1, { shuffle = tru
   // 1..100 (Politik), 101..200 (Geschichte), 201..300 (Mensch), 1..10 (Bundesland)
   let bamfNumber = card.bamf_num || null;
   if (!bamfNumber) {
+    const qNorm = norm(questionDe);
+    const trData = card.translationRu || lidTranslations[qNorm] || lidTranslations[qNorm.slice(0, 25)];
+    if (trData && trData.num) {
+      bamfNumber = trData.num;
+    }
+  }
+  if (!bamfNumber) {
+    const qAlpha = questionDe.replace(/[^a-zA-Z0-9\u00C0-\u017F]/g, '').toLowerCase();
+    for (const [key, trVal] of Object.entries(lidTranslations)) {
+      if (trVal?.num) {
+        const kAlpha = key.replace(/[^a-zA-Z0-9\u00C0-\u017F]/g, '').toLowerCase();
+        if (kAlpha === qAlpha || (kAlpha.length > 15 && (kAlpha.includes(qAlpha) || qAlpha.includes(kAlpha)))) {
+          bamfNumber = trVal.num;
+          break;
+        }
+      }
+    }
+  }
+  if (!bamfNumber) {
     const pos = card.position || 0;
     const deckName = (card.deck_name || '').toLowerCase();
     if (pos > 0) {
       if (deckName.includes('1.') || deckName.includes('politik')) {
         bamfNumber = pos;
       } else if (deckName.includes('2.') || deckName.includes('geschichte')) {
-        bamfNumber = 100 + pos;
+        bamfNumber = pos > 100 ? pos : 100 + pos;
       } else if (deckName.includes('3.') || deckName.includes('mensch')) {
-        bamfNumber = 200 + pos;
+        bamfNumber = pos > 100 ? pos : 200 + pos;
       } else {
         bamfNumber = pos; // 1..10
       }

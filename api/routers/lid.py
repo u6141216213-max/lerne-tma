@@ -19,6 +19,7 @@ def _load_lid_translations():
     if _LID_TRANSLATIONS_LOOKUP:
         return
     norm = lambda s: re.sub(r'\s+', ' ', (s or '').replace('\n', ' ')).strip().lower()
+    alphanorm = lambda s: re.sub(r'[^a-zA-Z0-9\u00C0-\u017F]', '', (s or '').lower())
     if os.path.exists(_LID_DATA_PATH):
         try:
             with open(_LID_DATA_PATH, 'r', encoding='utf-8') as f:
@@ -28,6 +29,7 @@ def _load_lid_translations():
                     _LID_TRANSLATIONS_LOOKUP[norm_k] = tr
                     if len(norm_k) >= 25:
                         _LID_TRANSLATIONS_LOOKUP[norm_k[:25]] = tr
+                    _LID_TRANSLATIONS_LOOKUP[alphanorm(key)] = tr
         except Exception as e:
             logger.warning(f"Could not load LiD translations in router: {e}")
 
@@ -60,26 +62,34 @@ def serialize_card(card, deck_name=""):
     pos = getattr(card, 'position', 0) or 0
     d_name = deck_name or (card.deck.name if hasattr(card, 'deck') and card.deck else "")
 
-    # Calculate BAMF catalog question number:
-    # Block 1 (Politik): 1..100
-    # Block 2 (Geschichte): 101..200
-    # Block 3 (Mensch): 201..300
-    # States (Bundesland): 1..10
+    norm = lambda s: re.sub(r'\s+', ' ', (s or '').replace('\n', ' ')).strip().lower()
+    alphanorm = lambda s: re.sub(r'[^a-zA-Z0-9\u00C0-\u017F]', '', (s or '').lower())
+    raw_first = (card.front_text or '').split('\n\n')[0] if '\n\n' in (card.front_text or '') else (card.front_text or '').split('\n')[0]
+    first_line = norm(raw_first)
+    trans_ru = (
+        _LID_TRANSLATIONS_LOOKUP.get(first_line)
+        or _LID_TRANSLATIONS_LOOKUP.get(first_line[:25])
+        or _LID_TRANSLATIONS_LOOKUP.get(alphanorm(raw_first))
+        or None
+    )
+
+    # Calculate BAMF catalog question number (1..300 general, or Land code):
     bamf_num = 0
-    if pos > 0:
+    if trans_ru and trans_ru.get('num'):
+        try:
+            bamf_num = int(trans_ru['num'])
+        except (ValueError, TypeError):
+            bamf_num = trans_ru['num']
+    elif pos > 0:
         d_lower = d_name.lower()
         if '1.' in d_name or 'politik' in d_lower:
             bamf_num = pos
         elif '2.' in d_name or 'geschichte' in d_lower:
-            bamf_num = 100 + pos
+            bamf_num = pos if pos > 100 else 100 + pos
         elif '3.' in d_name or 'mensch' in d_lower:
-            bamf_num = 200 + pos
+            bamf_num = pos if pos > 100 else 200 + pos
         else:
             bamf_num = pos
-
-    norm = lambda s: re.sub(r'\s+', ' ', (s or '').replace('\n', ' ')).strip().lower()
-    first_line = norm((card.front_text or '').split('\n\n')[0] if '\n\n' in (card.front_text or '') else (card.front_text or '').split('\n')[0])
-    trans_ru = _LID_TRANSLATIONS_LOOKUP.get(first_line) or _LID_TRANSLATIONS_LOOKUP.get(first_line[:25]) or None
 
     return {
         "id": card.id,

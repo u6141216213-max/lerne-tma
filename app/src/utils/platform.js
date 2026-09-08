@@ -173,7 +173,23 @@ export const hideBackButton = () => {
 /**
  * Open external URL in system browser or Telegram target
  */
-export const openExternalLink = (url) => {
+/**
+ * Reserve a browser popup while the click still has user activation.
+ * OAuth/Telegram URLs are fetched first, so opening them afterwards can be
+ * blocked by the browser's popup protection.
+ */
+export const prepareExternalLink = () => {
+  try {
+    if (getPlatform() !== 'web') return null;
+    const popup = window.open('about:blank', '_blank');
+    if (popup) popup.opener = null;
+    return popup;
+  } catch {
+    return null;
+  }
+};
+
+export const openExternalLink = (url, preparedWindow = null) => {
   try {
     const tg = window.Telegram?.WebApp;
     if (tg?.openLink) {
@@ -187,6 +203,15 @@ export const openExternalLink = (url) => {
   } catch {
     // Fallback to window.open
   }
-  window.open(url, '_blank', 'noopener,noreferrer');
+  try {
+    if (preparedWindow && !preparedWindow.closed) {
+      preparedWindow.location.href = url;
+      return;
+    }
+    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+    // If a popup was blocked, still give the user a working sign-in path.
+    if (!popup) window.location.assign(url);
+  } catch {
+    window.location.assign(url);
+  }
 };
-
