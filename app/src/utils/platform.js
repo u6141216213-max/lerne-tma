@@ -181,8 +181,23 @@ export const hideBackButton = () => {
 export const prepareExternalLink = () => {
   try {
     if (getPlatform() !== 'web') return null;
-    const popup = window.open('about:blank', '_blank');
-    if (popup) popup.opener = null;
+    const popup = window.open('', '_blank');
+    if (!popup) return null;
+    // Write loading content immediately so the browser keeps the popup alive
+    // while the async challenge request is in flight. Without this, Edge and
+    // Chrome leave about:blank and then block the deferred navigation because
+    // user activation has already expired.
+    try {
+      popup.document.write(
+        '<!doctype html><html lang="ru"><head><meta charset="utf-8">' +
+        '<title>Lerne — вход\u2026</title>' +
+        '<style>body{font-family:system-ui;background:#101827;color:#e9d5ff;' +
+        'display:grid;min-height:100vh;place-items:center;margin:0;font-size:1.1rem}</style>' +
+        '</head><body><p>Загрузка\u2026</p></body></html>'
+      );
+      popup.document.close();
+    } catch { /* cross-origin guard — cannot happen for a freshly opened blank window */ }
+    popup.opener = null;
     return popup;
   } catch {
     return null;
@@ -191,9 +206,13 @@ export const prepareExternalLink = () => {
 
 export const openExternalLink = (url, preparedWindow = null) => {
   try {
-    const tg = window.Telegram?.WebApp;
-    if (tg?.openLink) {
-      tg.openLink(url);
+    // Use Telegram's openLink only when genuinely running inside the Telegram
+    // client (initData is non-empty). telegram-web-app.js is always loaded by
+    // index.html, so window.Telegram.WebApp.openLink exists even in a plain
+    // browser, but outside Telegram it does nothing — the preparedWindow would
+    // stay on "Загрузка..." forever without this guard.
+    if (isTelegram() && window.Telegram?.WebApp?.openLink) {
+      window.Telegram.WebApp.openLink(url);
       return;
     }
     if (window.Capacitor?.Plugins?.Browser?.open) {
