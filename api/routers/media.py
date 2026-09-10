@@ -257,6 +257,78 @@ async def generate_audio_endpoint(
         raise HTTPException(status_code=500, detail=f"TTS Error: {str(e)}")
 
 
+@router.post("/generate-card-audio")
+async def generate_card_audio_endpoint(
+    data: dict = Body(...),
+    user_id: int = Depends(get_user_id),
+):
+    """Generate and attach audio without granting general card edit access."""
+    card_id = data.get('card_id')
+    side = data.get('side', 'front')
+    if not card_id or side not in ('front', 'back'):
+        raise HTTPException(status_code=400, detail="card_id and a valid side are required")
+
+    card = models.TMA_Card.get_or_none(
+        (models.TMA_Card.id == card_id) & (models.TMA_Card.is_deleted == False)
+    )
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    from api.services.collaborative_service import can_edit_audio, get_effective_user_role
+    if not get_effective_user_role(user_id, 'deck', card.deck_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not can_edit_audio(user_id, 'deck', card.deck_id):
+        raise HTTPException(status_code=403, detail="Audio editing is not allowed for this shared item")
+
+    text_value = data.get('text')
+    if not isinstance(text_value, str) or not text_value.strip():
+        text_value = card.front_text if side == 'front' else card.back_text
+    if not text_value or not text_value.strip():
+        raise HTTPException(status_code=400, detail="Text is required")
+
+    lang = _clean_param(data.get('lang'), 'de')
+    voice = _clean_param(data.get('voice'))
+    rate = _normalize_tts_rate(_clean_param(data.get('rate'))) or '+0%'
+    if not voice:
+        settings = {s.key: s.value for s in models.TMASetting.select()}
+        clean_lang = lang.lower().split('-')[0]
+        voice = settings.get(f'TTS_VOICE_{clean_lang.upper()}') or settings.get('TTS_VOICE') or LANG_DEFAULT_VOICES.get(clean_lang, LANG_DEFAULT_VOICES['de'])
+        rate = _normalize_tts_rate(settings.get('TTS_SPEED_RU' if clean_lang == 'ru' else 'TTS_SPEED')) or rate
+
+    try:
+        from api.utils.audio import generate_audio
+        result = await generate_audio(text_value.strip(), voice=voice, rate=rate)
+        result = result[0] if isinstance(result, tuple) else result
+        if not result:
+            raise HTTPException(status_code=500, detail="Failed to generate audio")
+
+        if result.startswith('http'):
+            path = result
+            url = result
+        else:
+            filename = os.path.basename(result)
+            with open(result, 'rb') as audio_file:
+                content = audio_file.read()
+            models.TMAMedia.get_or_create(filename=filename, folder='audio', defaults={'content': content})
+            try:
+                os.remove(result)
+            except OSError:
+                pass
+            path = filename
+            url = f'/api/media/audio/{filename}'
+
+        field = 'audio_back_path' if side == 'back' else 'audio_path'
+        setattr(card, field, path)
+        card.updated_at = models.datetime.datetime.now()
+        card.save(only=[getattr(models.TMA_Card, field), models.TMA_Card.updated_at])
+        return {'path': path, 'url': url}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error('Card audio generation failed for card %s: %s', card_id, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate and save card audio")
+
+
 
 @router.post("/upload-audio")
 async def upload_audio_file(

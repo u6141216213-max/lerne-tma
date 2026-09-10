@@ -125,4 +125,7 @@ def pull_changes(since: Optional[str] = None, user_id: int = Depends(get_user_id
 def collab_pull_changes(since: Optional[str] = None, user_id: int = Depends(get_user_id)):
     """Returns collaborative changes from ALL participants in shared folders since the given timestamp.
     Used for real-time sync polling: cards, decks, folders changed by any collaborator."""
-    return execute_collab_pull(since, user_id)
+    result = execute_collab_pull(since, user_id)
+    from api.services.collaborative_service import get_access_version
+    result["access_version"] = get_access_version(user_id)
+    return result

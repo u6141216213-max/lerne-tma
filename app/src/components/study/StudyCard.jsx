@@ -567,6 +567,10 @@ export const StudyCard = React.memo(({
                   onFlip={onFlip}
                   loading={loading}
                   playAudio={playAudio}
+                  onPlayCardAudio={async () => {
+                    const url = await frontVoicePicker.generateAndSaveToCard(card?.id, frontText, false);
+                    if (url) playAudio?.(url);
+                  }}
                   stopAudio={audioControls?.stopAudio}
                   isAudioLoading={isAudioLoading}
                   isAutoplayActive={isAutoplayActive}

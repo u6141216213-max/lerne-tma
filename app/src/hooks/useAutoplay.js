@@ -160,7 +160,14 @@ export const useAutoplay = ({ card, playAudio, stopAudio, showToast, startBackgr
     setStatus(isBack ? tr("Генерируем перевод") : tr("Генерируем фразу"));
     let generated;
     try {
-      generated = await api.post('/media/generate-audio', { text, lang, rate, voice });
+      generated = await api.post('/media/generate-card-audio', {
+        card_id: targetCard.id,
+        side,
+        text,
+        lang,
+        rate,
+        voice,
+      });
     } catch (err) {
       console.error('Audio generation failed:', err);
       showToast?.(tr("Не удалось сгенерировать {{p0}}: {{p1}}", { p0: isBack ? tr("перевод") : tr("фразу"), p1: err.response?.data?.detail || err.message }));
@@ -173,20 +180,12 @@ export const useAutoplay = ({ card, playAudio, stopAudio, showToast, startBackgr
       [urlKey]: generated.data.url
     };
 
-    const deckId = targetCard.deck_id || useDeckStore.getState().currentDeck?.id;
-    const saved = await api.post('/cards/save', {
-      card_id: targetCard.id,
-      deck_id: deckId,
-      [pathKey]: generated.data.path,
-      silent: true
-    });
-
     if (!isCurrentRun(runId)) return null;
 
     const mergedPatch = {
       ...audioPatch,
-      [pathKey]: saved.data[pathKey] || generated.data.path,
-      [urlKey]: saved.data[urlKey] || generated.data.url
+      [pathKey]: generated.data.path,
+      [urlKey]: generated.data.url
     };
     updateCardAudio(targetCard.id, mergedPatch);
     return mergedPatch[urlKey];

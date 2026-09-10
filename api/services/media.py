@@ -108,6 +108,10 @@ async def ensure_card_audio(card, user_id: int):
     import re
     from ..models import TMAMedia, TMASetting
     from ..utils.audio import generate_audio
+    from .collaborative_service import can_edit_audio
+
+    if not can_edit_audio(user_id, 'deck', card.deck_id):
+        return
     
     # 1. Проверяем, есть ли уже озвучка
     has_valid_audio = False

@@ -123,9 +123,9 @@ export const CollaboratorsModal = () => {
     }
   };
 
-  const handleRoleChange = async (collaboratorUserId, newRole) => {
+  const handleRoleChange = async (collaboratorUserId, newRole, canEditAudio = false) => {
     try {
-      await updateCollaboratorRole(targetType, targetId, collaboratorUserId, newRole);
+      await updateCollaboratorRole(targetType, targetId, collaboratorUserId, newRole, canEditAudio);
       showToast(tr("Роль участника обновлена"), "success");
       await loadCollaboratorsData();
       await fetchDecks(true);
@@ -587,7 +587,7 @@ export const CollaboratorsModal = () => {
                           ) : isOwner ? (
                             <select
                               value={c.role}
-                              onChange={(e) => handleRoleChange(c.user_id, e.target.value)}
+                              onChange={(e) => handleRoleChange(c.user_id, e.target.value, c.can_edit_audio)}
                               style={{
                                 background: 'rgba(255, 255, 255, 0.08)',
                                 border: '1px solid rgba(255, 255, 255, 0.15)',
@@ -613,6 +613,18 @@ export const CollaboratorsModal = () => {
                             }}>
                               {c.role === 'editor' ? tr("✏️ Редактор") : tr("👁️ Слушатель")}
                             </span>
+                          )}
+
+                          {isOwner && !c.is_owner && (
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'rgba(255,255,255,0.65)', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                              <input
+                                type="checkbox"
+                                checked={Boolean(c.can_edit_audio)}
+                                onChange={(e) => handleRoleChange(c.user_id, c.role, e.target.checked)}
+                                aria-label={tr("Разрешить изменять аудио")}
+                              />
+                              {tr("Изменять аудио")}
+                            </label>
                           )}
 
                           {isOwner && !c.is_owner && (

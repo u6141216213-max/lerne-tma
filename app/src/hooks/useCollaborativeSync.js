@@ -13,6 +13,7 @@ const POLL_INTERVAL_MS = 15000; // 15 seconds
  */
 export const useCollaborativeSync = () => {
   const lastSyncRef = useRef(null);
+  const accessVersionRef = useRef(undefined);
   const intervalRef = useRef(null);
   const isRunningRef = useRef(false);
 
@@ -151,6 +152,15 @@ export const useCollaborativeSync = () => {
       const res = await api.get('/sync/collab-pull', { params });
       if (res.data) {
         if (res.data.server_time) lastSyncRef.current = res.data.server_time;
+        if (res.data.access_version !== accessVersionRef.current) {
+          const hadVersion = accessVersionRef.current !== undefined;
+          accessVersionRef.current = res.data.access_version;
+          // Grants do not change folder/deck timestamps, so refresh the index.
+          if (hadVersion) {
+            const store = useDeckStore.getState();
+            await Promise.all([store.fetchDecks(true), store.fetchFolders()]);
+          }
+        }
         applyCollabChanges(res.data);
       }
     } catch (err) {

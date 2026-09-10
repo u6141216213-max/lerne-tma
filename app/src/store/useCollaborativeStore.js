@@ -21,11 +21,12 @@ export const useCollaborativeStore = create((set, get) => ({
     }
   },
 
-  addCollaborator: async (targetType, targetId, userIdentifier, role = 'editor') => {
+  addCollaborator: async (targetType, targetId, userIdentifier, role = 'editor', canEditAudio = false) => {
     try {
       const res = await api.post(`/collaborative/${targetType}/${targetId}/add`, {
         user_identifier: userIdentifier,
-        role
+        role,
+        can_edit_audio: canEditAudio
       });
       const { fetchCollaborators } = get();
       await fetchCollaborators(targetType, targetId);
@@ -36,11 +37,12 @@ export const useCollaborativeStore = create((set, get) => ({
     }
   },
 
-  updateCollaboratorRole: async (targetType, targetId, userIdToUpdate, newRole) => {
+  updateCollaboratorRole: async (targetType, targetId, userIdToUpdate, newRole, canEditAudio = false) => {
     try {
       const res = await api.put(`/collaborative/${targetType}/${targetId}/role`, {
         user_id_to_update: userIdToUpdate,
-        role: newRole
+        role: newRole,
+        can_edit_audio: canEditAudio
       });
       const { fetchCollaborators } = get();
       await fetchCollaborators(targetType, targetId);

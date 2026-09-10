@@ -117,6 +117,7 @@ class TMA_Collaborator(BaseModel):
     target_id = IntegerField(index=True)  # ID of folder or deck
     user_id = BigIntegerField(index=True) # Telegram User ID of collaborator
     role = CharField(default='editor')    # 'owner', 'editor', 'viewer'
+    can_edit_audio = BooleanField(default=False)
     added_by = BigIntegerField(null=True) # Telegram User ID who added this collaborator
     created_at = DateTimeField(default=datetime.datetime.now)
 

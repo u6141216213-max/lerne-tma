@@ -1,4 +1,5 @@
 import logging
+import os
 from fastapi import APIRouter, Depends, HTTPException, Body
 from pydantic import BaseModel
 from typing import Optional
@@ -18,11 +19,18 @@ logger = logging.getLogger(__name__)
 class AddCollaboratorRequest(BaseModel):
     user_identifier: str  # @username or user_id string
     role: str = 'viewer'  # 'editor' or 'viewer'
+    can_edit_audio: bool = False
 
 
 class UpdateRoleRequest(BaseModel):
     user_id_to_update: int
     role: str  # 'editor' or 'viewer'
+    can_edit_audio: bool = False
+
+
+class AdminBulkDeleteFoldersRequest(BaseModel):
+    folder_ids: list[int]
+    user_ids: list[int]
 
 
 @router.get("/check-access")
@@ -40,10 +48,28 @@ def check_access(type: str, id: int, user_id: int = Depends(get_user_id)):
         "target_id": id,
         "role": role,
         "can_edit": role in ['owner', 'editor'],
+        "can_edit_audio": collaborative_service.can_edit_audio(user_id, type, id),
         "is_shared": is_shared,
         "is_owner": role == 'owner',
         "collaborators_count": len(collaborators)
     }
+
+
+@router.post("/admin/folders/bulk-delete")
+def admin_bulk_delete_folders(req: AdminBulkDeleteFoldersRequest, user_id: int = Depends(get_user_id)):
+    """Soft-deletes selected users' folders and their contents."""
+    admin_id = int(os.environ.get("ADMIN_USER_ID", "642478257"))
+    if user_id != admin_id:
+        raise HTTPException(status_code=403, detail="Only admins can delete user folders")
+    if not req.folder_ids or not req.user_ids:
+        raise HTTPException(status_code=422, detail="folder_ids and user_ids must not be empty")
+    if len(req.folder_ids) > 100 or len(req.user_ids) > 100:
+        raise HTTPException(status_code=422, detail="Too many folders or users in one request")
+    try:
+        return collaborative_service.admin_bulk_delete_folders(req.folder_ids, req.user_ids)
+    except Exception:
+        logger.exception("Admin bulk folder deletion failed")
+        raise HTTPException(status_code=500, detail="Failed to delete selected folders")
 
 
 @router.get("/{target_type}/{target_id}/collaborators")
@@ -76,7 +102,7 @@ def add_collaborator(target_type: str, target_id: int, req: AddCollaboratorReque
         raise HTTPException(status_code=404, detail=f"User '{req.user_identifier}' not found in app database")
 
     try:
-        res = collaborative_service.add_collaborator(target_type, target_id, user_to_add.user_id, req.role, added_by=user_id)
+        res = collaborative_service.add_collaborator(target_type, target_id, user_to_add.user_id, req.role, added_by=user_id, can_edit_audio=req.can_edit_audio)
         return res
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -86,7 +112,7 @@ def add_collaborator(target_type: str, target_id: int, req: AddCollaboratorReque
 def update_collaborator_role(target_type: str, target_id: int, req: UpdateRoleRequest, user_id: int = Depends(get_user_id)):
     """Updates role for a collaborator."""
     try:
-        res = collaborative_service.update_collaborator_role(target_type, target_id, req.user_id_to_update, req.role, requester_id=user_id)
+        res = collaborative_service.update_collaborator_role(target_type, target_id, req.user_id_to_update, req.role, requester_id=user_id, can_edit_audio=req.can_edit_audio)
         return res
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -145,6 +171,3 @@ def get_presence(target_type: str, target_id: int, user_id: int = Depends(get_us
         raise HTTPException(status_code=403, detail="Access denied")
     
     return collaborative_service.record_and_get_presence(user_id, target_type, target_id)
-
-
-

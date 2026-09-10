@@ -18,6 +18,7 @@ export const StudyCardSpeech = React.memo(({
   onFlip,
   loading,
   playAudio,
+  onPlayCardAudio,
   stopAudio,
   isAudioLoading,
   isAutoplayActive,
@@ -344,12 +345,17 @@ export const StudyCardSpeech = React.memo(({
             {speechSuccess ? <Check size={32} /> : <Mic size={32} />}
           </button>
 
-          {card.audio_url && (
+          {(card.audio_url || onPlayCardAudio) && (
             <button
               type="button"
               className="btn-speak-audio"
               disabled={loading || isAutoplayActive}
-              onClick={(e) => { e.stopPropagation(); if (!isAutoplayActive && playAudio) playAudio(card.audio_url); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isAutoplayActive) return;
+                if (card.audio_url) playAudio?.(card.audio_url);
+                else onPlayCardAudio?.();
+              }}
               title={tr("Озвучить карточку")}
             >
               {isAudioLoading ? (

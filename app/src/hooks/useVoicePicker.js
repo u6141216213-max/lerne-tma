@@ -134,7 +134,9 @@ export const useVoicePicker = (
     setGenerateError(null);
 
     try {
-      const res = await api.post('/media/generate-audio', {
+      const res = await api.post('/media/generate-card-audio', {
+        card_id: cardId,
+        side: isBack ? 'back' : 'front',
         text: text.trim(),
         lang: code,
         voice,
@@ -161,8 +163,7 @@ export const useVoicePicker = (
           return url;
         }
 
-        const updatePayload = isBack ? { audio_back_path: path } : { audio_path: path };
-        await api.put(`/cards/${cardId}`, updatePayload);
+        // Audio has its own sharing permission; do not update the whole card here.
 
         const cardPatch = isBack
           ? { audio_back_url: url, audio_back_path: path }

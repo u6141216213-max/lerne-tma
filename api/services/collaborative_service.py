@@ -1,10 +1,86 @@
 import logging
 import datetime
 from typing import Optional, List, Dict, Any
+from peewee import fn
 
 from api import models
 
 logger = logging.getLogger(__name__)
+
+
+def get_access_version(user_id: int) -> str | None:
+    """Returns a stable marker that changes when this user's grants change."""
+    query = models.TMA_Collaborator.select(
+        fn.COUNT(models.TMA_Collaborator.id).alias('grant_count'),
+        fn.MAX(models.TMA_Collaborator.id).alias('last_grant_id'),
+    ).where(models.TMA_Collaborator.user_id == user_id)
+    row = query.dicts().get()
+    if not row['grant_count']:
+        return None
+    return f"{row['grant_count']}:{row['last_grant_id']}"
+
+
+def admin_bulk_delete_folders(folder_ids: List[int], user_ids: List[int]) -> dict:
+    """Soft-delete selected folders owned by selected users, including contents."""
+    now = datetime.datetime.now()
+    requested_ids = {int(folder_id) for folder_id in folder_ids}
+    selected_users = {int(selected_user_id) for selected_user_id in user_ids}
+    folders = list(models.TMA_Folder.select().where(
+        (models.TMA_Folder.id << list(requested_ids)) &
+        (models.TMA_Folder.user_id << list(selected_users)) &
+        (models.TMA_Folder.is_deleted == False)
+    ))
+    if not folders:
+        return {"status": "ok", "folders_deleted": 0, "subfolders_deleted": 0, "decks_deleted": 0, "collaborators_removed": 0}
+
+    all_folders = list(models.TMA_Folder.select().where(models.TMA_Folder.is_deleted == False))
+    children = {}
+    for folder in all_folders:
+        children.setdefault(folder.parent_id, []).append(folder)
+    target_folders = {}
+    for root in folders:
+        stack = [root]
+        while stack:
+            current = stack.pop()
+            if current.id in target_folders:
+                continue
+            target_folders[current.id] = current
+            stack.extend(children.get(current.id, []))
+
+    target_ids = list(target_folders)
+    with models.tma_db.atomic():
+        deck_ids = [row.id for row in models.TMA_Deck.select(models.TMA_Deck.id).where(
+            (models.TMA_Deck.folder_id << target_ids) &
+            (models.TMA_Deck.user_id << list(selected_users)) &
+            (models.TMA_Deck.is_deleted == False)
+        )]
+        if deck_ids:
+            models.TMA_Card.update(is_deleted=True, updated_at=now).where(
+                (models.TMA_Card.deck_id << deck_ids) & (models.TMA_Card.is_deleted == False)
+            ).execute()
+            models.TMA_Deck.update(is_deleted=True, updated_at=now).where(
+                models.TMA_Deck.id << deck_ids
+            ).execute()
+        models.TMA_Folder.update(is_deleted=True, updated_at=now).where(
+            models.TMA_Folder.id << target_ids
+        ).execute()
+        removed_collaborators = models.TMA_Collaborator.delete().where(
+            (models.TMA_Collaborator.target_type == 'folder') &
+            (models.TMA_Collaborator.target_id << target_ids)
+        ).execute()
+        if deck_ids:
+            removed_collaborators += models.TMA_Collaborator.delete().where(
+                (models.TMA_Collaborator.target_type == 'deck') &
+                (models.TMA_Collaborator.target_id << deck_ids)
+            ).execute()
+
+    return {
+        "status": "ok",
+        "folders_deleted": len(folders),
+        "subfolders_deleted": len(target_ids) - len(folders),
+        "decks_deleted": len(deck_ids),
+        "collaborators_removed": removed_collaborators,
+    }
 
 
 def get_batch_collaborative_info(user_id: int, decks: List[Any] = None, folders: List[Any] = None, folder_map: Dict[int, Any] = None) -> Dict[str, Dict[int, Dict[str, Any]]]:
@@ -179,6 +255,35 @@ def get_effective_user_role(user_id: int, target_type: str, target_id: int) -> O
     return None
 
 
+def can_edit_audio(user_id: int, target_type: str, target_id: int) -> bool:
+    """Audio is a separate permission: owners/editors can always change it;
+    viewers need an explicit grant on the item or an inherited folder entry."""
+    role = get_effective_user_role(user_id, target_type, target_id)
+    if role in ('owner', 'editor'):
+        return True
+    if not role:
+        return False
+
+    target_ids = []
+    if target_type == 'deck':
+        deck = models.TMA_Deck.get_or_none(models.TMA_Deck.id == target_id)
+        if deck:
+            target_ids.append(('deck', deck.id))
+            target_ids.extend(('folder', fid) for fid in _get_all_parent_folder_ids(deck.folder_id) if deck.folder_id)
+    elif target_type == 'folder':
+        target_ids.extend(('folder', fid) for fid in _get_all_parent_folder_ids(target_id))
+
+    for kind, item_id in target_ids:
+        row = models.TMA_Collaborator.get_or_none(
+            (models.TMA_Collaborator.target_type == kind) &
+            (models.TMA_Collaborator.target_id == item_id) &
+            (models.TMA_Collaborator.user_id == user_id)
+        )
+        if row:
+            return bool(row.can_edit_audio)
+    return False
+
+
 def is_shared_item(user_id: int, target_type: str, target_id: int) -> bool:
     """Returns True if the folder or deck has active collaborators or the user is an invited collaborator."""
     role = get_effective_user_role(user_id, target_type, target_id)
@@ -249,7 +354,8 @@ def get_collaborators(target_type: str, target_id: int) -> List[Dict[str, Any]]:
             "first_name": owner_user.first_name if owner_user else "Owner",
             "photo_url": owner_user.photo_url if owner_user else None,
             "role": "owner",
-            "is_owner": True
+            "is_owner": True,
+            "can_edit_audio": True
         })
 
     # Direct collaborators
@@ -283,6 +389,7 @@ def get_collaborators(target_type: str, target_id: int) -> List[Dict[str, Any]]:
             "photo_url": u.photo_url if u else None,
             "role": effective_role,
             "is_owner": False,
+            "can_edit_audio": bool(effective_role in ('owner', 'editor') or getattr(r, 'can_edit_audio', False)),
             "created_at": r.created_at.isoformat() if r.created_at else None
         })
 
@@ -290,7 +397,7 @@ def get_collaborators(target_type: str, target_id: int) -> List[Dict[str, Any]]:
 
 
 
-def add_collaborator(target_type: str, target_id: int, user_id_to_add: int, role: str, added_by: int) -> dict:
+def add_collaborator(target_type: str, target_id: int, user_id_to_add: int, role: str, added_by: int, can_edit_audio: bool = False) -> dict:
     """Adds or updates a collaborator for a folder or deck. Only the owner can manage collaborators."""
     requester_role = get_effective_user_role(added_by, target_type, target_id)
     if requester_role != 'owner':
@@ -305,18 +412,20 @@ def add_collaborator(target_type: str, target_id: int, user_id_to_add: int, role
         user_id=user_id_to_add,
         defaults={
             "role": role,
+            "can_edit_audio": can_edit_audio,
             "added_by": added_by
         }
     )
     if not created:
         collab.role = role
+        collab.can_edit_audio = can_edit_audio
         collab.added_by = added_by
         collab.save()
 
-    return {"status": "ok", "user_id": user_id_to_add, "role": role}
+    return {"status": "ok", "user_id": user_id_to_add, "role": role, "can_edit_audio": can_edit_audio}
 
 
-def update_collaborator_role(target_type: str, target_id: int, user_id_to_update: int, new_role: str, requester_id: int) -> dict:
+def update_collaborator_role(target_type: str, target_id: int, user_id_to_update: int, new_role: str, requester_id: int, can_edit_audio: bool = False) -> dict:
     """Updates role for an existing collaborator. Only owner can change roles."""
     requester_role = get_effective_user_role(requester_id, target_type, target_id)
     if requester_role != 'owner':
@@ -337,13 +446,15 @@ def update_collaborator_role(target_type: str, target_id: int, user_id_to_update
             target_id=target_id,
             user_id=user_id_to_update,
             role=new_role,
+            can_edit_audio=can_edit_audio,
             added_by=requester_id
         )
     else:
         collab.role = new_role
+        collab.can_edit_audio = can_edit_audio
         collab.save()
 
-    return {"status": "ok", "user_id": user_id_to_update, "role": new_role}
+    return {"status": "ok", "user_id": user_id_to_update, "role": new_role, "can_edit_audio": can_edit_audio}
 
 
 def join_by_share_id(share_id: str, user_id: int) -> dict:
