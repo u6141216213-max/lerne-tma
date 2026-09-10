@@ -14,8 +14,12 @@ class CreateDeckRequest(BaseModel):
 
 
 class AssignDeckRequest(BaseModel):
-    user_ids: List[int]
-    mode: str = "copy"  # "copy", "collaborate", "library", "default_all"
+    user_ids: List[int] = []
+    mode: str = "copy"  # "copy", "collaborate", "library", "default_all", "overwrite_all", "overwrite_selected"
+    target_audience: Optional[str] = "selected"  # "existing_copies", "selected", "all"
+    delete_existing_copies: bool = True
+    collaborator_role: str = "viewer"  # "viewer" or "editor"
+    notify_telegram: bool = False
 
 
 class SetDefaultDeckRequest(BaseModel):
@@ -24,8 +28,12 @@ class SetDefaultDeckRequest(BaseModel):
 
 
 class AssignFolderRequest(BaseModel):
-    user_ids: List[int]
-    mode: str = "copy"  # "copy" or "default_all"
+    user_ids: List[int] = []
+    mode: str = "copy"  # "copy", "collaborate", "library", "default_all", "overwrite_all", "overwrite_selected"
+    target_audience: Optional[str] = "selected"  # "existing_copies", "selected", "all"
+    delete_existing_copies: bool = True
+    collaborator_role: str = "viewer"  # "viewer" or "editor"
+    notify_telegram: bool = False
 
 
 class SetDefaultFolderRequest(BaseModel):

@@ -227,10 +227,10 @@ export const openExternalLink = (url, preparedWindow = null) => {
       preparedWindow.location.href = url;
       return;
     }
-    const popup = window.open(url, '_blank', 'noopener,noreferrer');
-    // If a popup was blocked, still give the user a working sign-in path.
-    if (!popup) window.location.assign(url);
+    // If a popup blocker prevented the prepared window, try opening directly.
+    // If that too is blocked, the AuthRequiredModal shows a manual link (authUrl).
+    window.open(url, '_blank', 'noopener,noreferrer');
   } catch {
-    window.location.assign(url);
+    // Popup is blocked — AuthRequiredModal's authUrl link is the fallback.
   }
 };

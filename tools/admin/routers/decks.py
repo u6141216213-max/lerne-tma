@@ -527,6 +527,7 @@ def assign_deck(deck_id: str, req: AssignDeckRequest):
                        f"Добавлена в Библиотеку (для будущих новых пользователей) и скопирована {res.get('copied_to_users', 0)} существующим пользователям."
         }
 
+    # ── Library mode ─────────────────────────────────────────────────────────
     if req.mode == "library":
         target_library_deck = models.Deck.get_or_none(
             (models.Deck.is_deleted == False) &
@@ -561,36 +562,155 @@ def assign_deck(deck_id: str, req: AssignDeckRequest):
             return {"status": "ok", "mode": "library", "action": "created",
                     "message": f"Колода '{clean_name}' добавлена в Библиотеку как мастер-дефолтная!"}
 
-    for target_user_id in req.user_ids:
-        if req.mode == "collaborate":
-            models.TMA_Collaborator.get_or_create(
-                target_type="deck", target_id=deck.id, user_id=target_user_id,
-                defaults={"role": "editor", "added_by": deck.user_id}
-            )
-            processed_users += 1
-        else:
-            new_deck = models.TMA_Deck.create(
-                user_id=target_user_id, name=deck.name,
-                target_language=deck.target_language, level=deck.level, topic=deck.topic,
-                metadata=json.dumps({"assigned_from_deck_id": deck.id})
-            )
-            card_objs = [
-                models.TMA_Card(
-                    deck=new_deck, front_text=c.front_text or "", back_text=c.back_text or "",
-                    context=c.context or "", tags=c.tags or "[]", audio_path=c.audio_path or "",
-                    audio_back_path=c.audio_back_path or "",
-                    card_type=getattr(c, 'card_type', 'translation') or 'translation',
-                    source=getattr(c, 'source', 'assigned') or 'assigned',
-                    creator_id=getattr(deck, 'user_id', 0),
-                    created_at=now, updated_at=now
+    # ── Overwrite modes: find users with copies, delete old, insert fresh ────
+    if req.mode in ("overwrite_all", "overwrite_selected"):
+        target_uids: set = set()
+        if req.target_audience in ("existing_copies", "all") or req.mode == "overwrite_all":
+            matching_decks = list(models.TMA_Deck.select(models.TMA_Deck.user_id).where(
+                (models.TMA_Deck.is_deleted == False) &
+                (models.TMA_Deck.user_id != deck.user_id) &
+                ((models.TMA_Deck.name == deck.name) | (models.TMA_Deck.name == clean_name) | (models.TMA_Deck.name == f"⭐ {clean_name}"))
+            ))
+            target_uids = {md.user_id for md in matching_decks}
+            if req.target_audience == "all":
+                target_uids.update(
+                    u.user_id for u in models.TMAUser.select(models.TMAUser.user_id)
+                    if u.user_id != deck.user_id
                 )
-                for c in cards
-            ]
-            if card_objs:
-                models.TMA_Card.bulk_create(card_objs, batch_size=200)
-            processed_users += 1
+        if req.user_ids and req.mode == "overwrite_selected":
+            target_uids = set(req.user_ids) - {deck.user_id}
+
+        if not target_uids:
+            return {"status": "ok", "users_processed": 0,
+                    "message": f"Пользователей с колодой '{deck.name}' не найдено."}
+
+        with models.tma_db.atomic():
+            for uid in target_uids:
+                user_deck = models.TMA_Deck.get_or_none(
+                    (models.TMA_Deck.user_id == uid) & (models.TMA_Deck.is_deleted == False) &
+                    ((models.TMA_Deck.name == deck.name) | (models.TMA_Deck.name == clean_name) | (models.TMA_Deck.name == f"⭐ {clean_name}"))
+                )
+                if user_deck:
+                    old_card_ids = [c.id for c in models.TMA_Card.select(models.TMA_Card.id).where(models.TMA_Card.deck_id == user_deck.id)]
+                    if old_card_ids:
+                        models.TMAProgress.delete().where(models.TMAProgress.card_id << old_card_ids).execute()
+                        models.TMA_Card.delete().where(models.TMA_Card.id << old_card_ids).execute()
+                    user_deck.topic = deck.topic
+                    user_deck.level = deck.level
+                    user_deck.target_language = deck.target_language
+                    user_deck.updated_at = now
+                    user_deck.save()
+                else:
+                    user_deck = models.TMA_Deck.create(
+                        user_id=uid, name=deck.name,
+                        target_language=deck.target_language, level=deck.level, topic=deck.topic,
+                        metadata=json.dumps({"assigned_from_deck_id": deck.id}),
+                        created_at=now, updated_at=now
+                    )
+                card_objs = [
+                    models.TMA_Card(
+                        deck=user_deck, front_text=c.front_text or "", back_text=c.back_text or "",
+                        context=c.context or "", tags=c.tags or "[]", audio_path=c.audio_path or "",
+                        audio_back_path=c.audio_back_path or "",
+                        card_type=getattr(c, 'card_type', 'translation') or 'translation',
+                        source=getattr(c, 'source', 'assigned') or 'assigned',
+                        creator_id=getattr(deck, 'user_id', 0),
+                        created_at=now, updated_at=now
+                    )
+                    for c in cards
+                ]
+                if card_objs:
+                    models.TMA_Card.bulk_create(card_objs, batch_size=200)
+                processed_users += 1
+
+        return {
+            "status": "ok", "mode": req.mode, "users_processed": processed_users,
+            "message": f"Колода '{deck.name}' полностью заменена у {processed_users} пользователей."
+        }
+
+    # ── Collaborate mode ──────────────────────────────────────────────────────
+    if req.mode == "collaborate":
+        role = req.collaborator_role or "viewer"
+        target_uids: set = set()
+        if req.target_audience == "existing_copies":
+            matching = list(models.TMA_Deck.select(models.TMA_Deck.user_id).where(
+                (models.TMA_Deck.is_deleted == False) &
+                (models.TMA_Deck.user_id != deck.user_id) &
+                ((models.TMA_Deck.name == deck.name) | (models.TMA_Deck.name == clean_name) | (models.TMA_Deck.name == f"⭐ {clean_name}"))
+            ))
+            target_uids = {m.user_id for m in matching}
+        elif req.target_audience == "all":
+            target_uids = {
+                u.user_id for u in models.TMAUser.select(models.TMAUser.user_id)
+                if u.user_id != deck.user_id
+            }
+        elif req.target_audience == "selected":
+            target_uids = set(req.user_ids) - {deck.user_id}
+
+        if req.notify_telegram:
+            logging.info("[assign_deck/collaborate] Telegram notification requested — bot integration pending.")
+
+        with models.tma_db.atomic():
+            for uid in target_uids:
+                if req.delete_existing_copies:
+                    user_deck = models.TMA_Deck.get_or_none(
+                        (models.TMA_Deck.user_id == uid) & (models.TMA_Deck.is_deleted == False) &
+                        ((models.TMA_Deck.name == deck.name) | (models.TMA_Deck.name == clean_name) | (models.TMA_Deck.name == f"⭐ {clean_name}"))
+                    )
+                    if user_deck and user_deck.id != deck.id:
+                        old_card_ids = [c.id for c in models.TMA_Card.select(models.TMA_Card.id).where(models.TMA_Card.deck_id == user_deck.id)]
+                        if old_card_ids:
+                            models.TMAProgress.delete().where(models.TMAProgress.card_id << old_card_ids).execute()
+                            models.TMA_Card.delete().where(models.TMA_Card.id << old_card_ids).execute()
+                        models.TMA_Deck.delete().where(models.TMA_Deck.id == user_deck.id).execute()
+
+                models.TMA_Collaborator.get_or_create(
+                    target_type="deck", target_id=deck.id, user_id=uid,
+                    defaults={"role": role, "added_by": deck.user_id}
+                )
+                processed_users += 1
+
+        return {
+            "status": "ok", "mode": "collaborate", "users_processed": processed_users,
+            "message": f"Совместный доступ ({role}) к колоде '{deck.name}' выдан {processed_users} пользователям."
+        }
+
+    # ── Copy mode (default) ──────────────────────────────────────────────────
+    for target_user_id in req.user_ids:
+        new_deck = models.TMA_Deck.create(
+            user_id=target_user_id, name=deck.name,
+            target_language=deck.target_language, level=deck.level, topic=deck.topic,
+            metadata=json.dumps({"assigned_from_deck_id": deck.id})
+        )
+        card_objs = [
+            models.TMA_Card(
+                deck=new_deck, front_text=c.front_text or "", back_text=c.back_text or "",
+                context=c.context or "", tags=c.tags or "[]", audio_path=c.audio_path or "",
+                audio_back_path=c.audio_back_path or "",
+                card_type=getattr(c, 'card_type', 'translation') or 'translation',
+                source=getattr(c, 'source', 'assigned') or 'assigned',
+                creator_id=getattr(deck, 'user_id', 0),
+                created_at=now, updated_at=now
+            )
+            for c in cards
+        ]
+        if card_objs:
+            models.TMA_Card.bulk_create(card_objs, batch_size=200)
+        processed_users += 1
 
     return {"status": "ok", "mode": req.mode, "users_processed": processed_users}
+
+
+@router.post("/api/admin/decks/{deck_id}/to-library")
+def promote_deck_to_library_direct(deck_id: str):
+    """Direct 1-click endpoint to promote a deck to Master Library."""
+    return assign_deck(deck_id, AssignDeckRequest(mode="library"))
+
+
+@router.post("/api/admin/decks/{deck_id}/overwrite-users")
+def overwrite_deck_users_direct(deck_id: str):
+    """Direct 1-click endpoint to completely overwrite this deck for all users who have it."""
+    return assign_deck(deck_id, AssignDeckRequest(mode="overwrite_all", target_audience="existing_copies"))
 
 
 # ─── Single-deck regen endpoints ─────────────────────────────────────────────

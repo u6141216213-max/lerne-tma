@@ -5,16 +5,10 @@ import { db } from '../services/localDb';
 import { transformCardToExamQuestion } from '../utils/lidCardAdapter';
 import { getBundeslandByCode } from '../data/bundeslaender';
 import { useUiStore } from './useUiStore';
+import { pickRandom } from '../utils/shuffle';
 
 const STORAGE_LAND_KEY = 'lerne_lid_selected_land';
 const STORAGE_REMEMBER_KEY = 'lerne_lid_remember_land';
-
-// Helper to pick N random items from an array without replacement
-const pickRandom = (array, count) => {
-  if (!array || array.length <= count) return [...(array || [])];
-  const shuffled = [...array].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
-};
 
 export const useLidStore = create((set, get) => ({
   // Land selection

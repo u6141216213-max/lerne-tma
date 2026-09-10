@@ -60,6 +60,9 @@
         <button onclick="switchTab('decks')" id="tab-decks" class="px-4 py-2 text-sm font-medium rounded-lg transition-all flex items-center gap-2 text-slate-400 hover:text-white">
           <i data-lucide="layers" class="w-4 h-4"></i> Все колоды
         </button>
+        <button onclick="switchTab('folders')" id="tab-folders" class="px-4 py-2 text-sm font-medium rounded-lg transition-all flex items-center gap-2 text-slate-400 hover:text-white">
+          <i data-lucide="folder" class="w-4 h-4 text-indigo-400"></i> Папки (<span id="folders-tab-badge">0</span>)
+        </button>
         <button onclick="switchTab('ai')" id="tab-ai" class="px-4 py-2 text-sm font-medium rounded-lg transition-all flex items-center gap-2 text-slate-400 hover:text-white">
           <i data-lucide="sparkles" class="w-4 h-4"></i> ИИ Перегенерация
         </button>
@@ -143,7 +146,7 @@
           <button onclick="filterLibraryDecks()" class="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold rounded-lg border border-amber-500/30 flex items-center gap-1.5 shrink-0 transition">
             ⭐ Только Библиотека
           </button>
-          <button onclick="openFoldersModal()" class="px-3 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 text-xs font-bold rounded-lg border border-indigo-500/30 flex items-center gap-1.5 shrink-0 transition">
+          <button onclick="switchTab('folders')" class="px-3 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 text-xs font-bold rounded-lg border border-indigo-500/30 flex items-center gap-1.5 shrink-0 transition">
             <i data-lucide="folder" class="w-3.5 h-3.5 text-indigo-400"></i> 📁 Папки (<span id="folders-count-btn">...</span>)
           </button>
           <button onclick="purgeDeletedItems()" title="Окончательно удалить все элементы из корзины (папки, колоды, карточки с флагом удалён)" class="px-3 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 text-xs font-bold rounded-lg border border-rose-500/40 flex items-center gap-1.5 shrink-0 transition">
@@ -227,6 +230,122 @@
               Вперёд ►
             </button>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab: Folders Management (Full Screen Dedicated Workspace) -->
+    <section id="content-folders" class="space-y-6 hidden">
+      <!-- Header & Quick Actions -->
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <div class="flex items-center gap-3">
+            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+              <i data-lucide="folder" class="w-6 h-6 text-indigo-400"></i>
+              <span>Управление папками TMA</span>
+            </h2>
+            <span id="folders-stats-badge" class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-slate-800 text-slate-300 border border-slate-700">Загрузка...</span>
+          </div>
+          <p class="text-sm text-slate-400">Полноценный обзор папок пользователей, входящих колод и карточек, назначение дефолтных и раздача</p>
+        </div>
+        <div class="flex flex-wrap gap-2.5 items-center">
+          <button onclick="loadAdminFolders()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg border border-slate-700 flex items-center gap-1.5 shrink-0 transition text-slate-300">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Обновить
+          </button>
+        </div>
+      </div>
+
+      <!-- Metrics Overview Cards (4 cards) -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="glass p-4 rounded-xl border border-slate-800 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+            <i data-lucide="folder" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="text-xs text-slate-400 font-medium">Всего папок</div>
+            <div id="stat-folders-total" class="text-lg font-bold text-white">0</div>
+          </div>
+        </div>
+
+        <div class="glass p-4 rounded-xl border border-slate-800 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+            <i data-lucide="layers" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="text-xs text-slate-400 font-medium">Колод в папках</div>
+            <div id="stat-folders-decks" class="text-lg font-bold text-white">0</div>
+          </div>
+        </div>
+
+        <div class="glass p-4 rounded-xl border border-slate-800 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+            <i data-lucide="file-text" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="text-xs text-slate-400 font-medium">Всего карточек</div>
+            <div id="stat-folders-cards" class="text-lg font-bold text-white">0</div>
+          </div>
+        </div>
+
+        <div class="glass p-4 rounded-xl border border-slate-800 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+            <i data-lucide="star" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="text-xs text-slate-400 font-medium">Дефолтных папок</div>
+            <div id="stat-folders-default" class="text-lg font-bold text-amber-300">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active User Filter Banner (if filtered by user) -->
+      <div id="folder-user-filter-banner" class="hidden glass p-3.5 rounded-xl border border-indigo-500/30 bg-indigo-950/30 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 text-xs">
+          <span class="text-indigo-300 font-semibold">Фильтр по пользователю:</span>
+          <span id="folder-user-filter-name" class="font-bold text-white"></span>
+        </div>
+        <button onclick="clearFolderUserFilter()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700">
+          ✕ Сбросить фильтр
+        </button>
+      </div>
+
+      <!-- Toolbar: Filters + Search + Batch Selection -->
+      <div class="glass p-4 rounded-xl border border-slate-800 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
+        <!-- Search & Filter Pills -->
+        <div class="flex flex-wrap items-center gap-2.5 flex-1">
+          <div class="relative flex-1 min-w-[220px]">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+            <input type="text" id="folder-search" oninput="renderFoldersList()" placeholder="Поиск папки (название, владелец, ID, язык, колода)..." class="bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 w-full">
+          </div>
+
+          <!-- Filter Pills -->
+          <div class="flex items-center gap-1 bg-slate-900/90 p-1 rounded-lg border border-slate-800 text-xs">
+            <button onclick="setFolderFilter('all')" id="folder-filter-all" class="px-2.5 py-1 rounded font-semibold transition bg-indigo-600 text-white">Все</button>
+            <button onclick="setFolderFilter('default')" id="folder-filter-default" class="px-2.5 py-1 rounded font-semibold transition text-slate-400 hover:text-white">★ Дефолтные</button>
+            <button onclick="setFolderFilter('custom')" id="folder-filter-custom" class="px-2.5 py-1 rounded font-semibold transition text-slate-400 hover:text-white">☆ Обычные</button>
+            <button onclick="setFolderFilter('with_decks')" id="folder-filter-with_decks" class="px-2.5 py-1 rounded font-semibold transition text-slate-400 hover:text-white">С колодами</button>
+            <button onclick="setFolderFilter('empty')" id="folder-filter-empty" class="px-2.5 py-1 rounded font-semibold transition text-slate-400 hover:text-white">Пустые</button>
+          </div>
+        </div>
+
+        <!-- Bulk Controls -->
+        <div class="flex items-center gap-2 shrink-0 justify-between md:justify-end">
+          <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 hover:border-slate-700 shrink-0" title="Выбрать все отфильтрованные папки">
+            <input type="checkbox" id="folder-table-select-all" onchange="toggleSelectAllFolders(this.checked)" class="w-4 h-4 text-indigo-600 rounded cursor-pointer">
+            <span class="text-[11px] font-semibold text-slate-300">Выбрать все</span>
+          </label>
+
+          <button id="btn-delete-selected-folders" onclick="deleteSelectedFolders()" class="hidden px-3 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg border border-rose-500/30 flex items-center gap-1.5 shrink-0 transition shadow-md shadow-rose-500/20" title="Удалить выбранные папки и все входящие в них колоды">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 🗑️ Удалить (<span id="selected-folders-count">0</span>)
+          </button>
+        </div>
+      </div>
+
+      <!-- Spacious Folders List Container -->
+      <div id="folders-list" class="space-y-4">
+        <div class="p-12 text-center text-slate-500">
+          <i data-lucide="loader-2" class="w-6 h-6 animate-spin inline mb-2 text-indigo-400"></i>
+          <div>Загрузка папок...</div>
         </div>
       </div>
     </section>
@@ -480,7 +599,7 @@
                 <i data-lucide="layers" class="w-4 h-4"></i> 2. Отложенные колоды в пакете (<span class="batch-total-decks-lbl">0</span>)
               </h3>
               <div class="flex items-center gap-2 text-xs">
-                <button type="button" onclick="openFoldersModal()" class="px-2.5 py-1 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 rounded-lg border border-purple-500/30 font-semibold flex items-center gap-1 transition">
+                <button type="button" onclick="switchTab('folders')" class="px-2.5 py-1 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 rounded-lg border border-purple-500/30 font-semibold flex items-center gap-1 transition">
                   <i data-lucide="folder" class="w-3.5 h-3.5"></i> 📁 Папки...
                 </button>
                 <button type="button" onclick="switchTab('decks')" class="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 rounded-lg border border-indigo-500/30 font-semibold flex items-center gap-1 transition">
@@ -1327,46 +1446,7 @@
     </div>
   </div>
 
-  <!-- Modal: Folders Manager -->
-  <div id="modal-folders-manager" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-    <div class="glass max-w-3xl w-full p-6 rounded-2xl border border-slate-800 space-y-4 max-h-[90vh] flex flex-col">
-      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-            <i data-lucide="folder" class="w-4 h-4"></i>
-          </div>
-          <div>
-            <h3 class="font-bold text-lg text-white">Управление папками TMA</h3>
-            <p class="text-xs text-slate-400">Раздача папок пользователям или назначение всей папки дефолтной для всех</p>
-          </div>
-        </div>
-        <button onclick="closeModal('modal-folders-manager')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
-      </div>
-
-      <div class="flex items-center gap-3 flex-wrap">
-        <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 hover:border-slate-700 shrink-0" title="Выбрать все отфильтрованные папки">
-          <input type="checkbox" id="folder-table-select-all" onchange="toggleSelectAllFolders(this.checked)" class="w-4 h-4 text-indigo-600 rounded cursor-pointer">
-          <span class="text-[11px] font-semibold text-slate-300">Все</span>
-        </label>
-        <input type="text" id="folder-search" onkeyup="renderFoldersList()" placeholder="Поиск папки (название, владелец)..." class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 flex-1 min-w-[180px]">
-        <button id="btn-delete-selected-folders" onclick="deleteSelectedFolders()" class="hidden px-3 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg border border-rose-500/30 flex items-center gap-1.5 shrink-0 transition shadow-md shadow-rose-500/20" title="Удалить выбранные папки и их колоды">
-          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 🗑️ Удалить (<span id="selected-folders-count">0</span>)
-        </button>
-        <button onclick="loadAdminFolders()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg border border-slate-700 text-slate-300 flex items-center gap-1.5 shrink-0">
-          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Обновить
-        </button>
-      </div>
-
-      <!-- Folders Scrollable List -->
-      <div id="folders-modal-list" class="flex-1 overflow-y-auto space-y-2.5 pr-1 max-h-[60vh]">
-        <div class="p-8 text-center text-slate-500">Загрузка папок...</div>
-      </div>
-
-      <div class="flex justify-end pt-2 border-t border-slate-800">
-        <button onclick="closeModal('modal-folders-manager')" class="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-semibold rounded-lg hover:bg-slate-700">Закрыть</button>
-      </div>
-    </div>
-  </div>
+  <!-- (Old modal-folders-manager removed in favor of full tab: content-folders) -->
 
   <!-- Modal: Assign Folder to Users -->
   <div id="modal-assign-folder" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
@@ -1400,6 +1480,14 @@
           <label class="p-2.5 bg-purple-950/50 border border-purple-500/40 rounded-xl cursor-pointer hover:border-purple-500/70 flex items-center gap-2 text-xs shadow-md shadow-purple-500/10">
             <input type="radio" name="assign-folder-mode" value="default_all" class="text-purple-500">
             <span class="font-bold text-purple-200">🌟 Для ВСЕХ (дефолтная)</span>
+          </label>
+          <label class="p-2.5 bg-amber-950/40 border border-amber-500/30 rounded-xl cursor-pointer hover:border-amber-500/60 flex items-center gap-2 text-xs">
+            <input type="radio" name="assign-folder-mode" value="library" class="text-amber-500">
+            <span class="font-bold text-amber-300">⭐ В Библиотеку</span>
+          </label>
+          <label class="p-2.5 bg-cyan-950/40 border border-cyan-500/30 rounded-xl cursor-pointer hover:border-cyan-500/60 flex items-center gap-2 text-xs">
+            <input type="radio" name="assign-folder-mode" value="overwrite_all" class="text-cyan-500">
+            <span class="font-bold text-cyan-300">🔄 Обновить у всех (полная замена)</span>
           </label>
         </div>
       </div>
@@ -1700,12 +1788,86 @@
       renderDecksTable(currentRenderedDecks);
     }
 
-    function stageSelectedDecks() {
-      const checkedBoxes = document.querySelectorAll('.deck-row-checkbox:checked');
-      if (checkedBoxes.length === 0) return;
+    // ─── Unified Deck Selection State ──────────────────────────────────────────
+    let selectedDeckIds = new Set();
 
-      checkedBoxes.forEach(cb => {
-        const sId = String(cb.value);
+    function toggleDeckRowSelection(deckId, checked) {
+      const sId = String(deckId);
+      if (checked) {
+        selectedDeckIds.add(sId);
+      } else {
+        selectedDeckIds.delete(sId);
+      }
+      updateDeckSelectionUI();
+    }
+
+    function toggleSelectAllDeckRows(checked) {
+      const startIdx = (currentDeckPage - 1) * deckPageSize;
+      const pageDecks = currentRenderedDecks.slice(startIdx, startIdx + deckPageSize);
+      pageDecks.forEach(d => {
+        const sId = String(d.id);
+        if (checked) {
+          selectedDeckIds.add(sId);
+        } else {
+          selectedDeckIds.delete(sId);
+        }
+      });
+      document.querySelectorAll('.deck-row-checkbox').forEach(cb => {
+        cb.checked = selectedDeckIds.has(String(cb.value));
+      });
+      updateDeckSelectionUI();
+    }
+
+    function clearDeckSelection() {
+      selectedDeckIds.clear();
+      document.querySelectorAll('.deck-row-checkbox').forEach(cb => cb.checked = false);
+      const selectAll = document.getElementById('deck-table-select-all');
+      if (selectAll) selectAll.checked = false;
+      updateDeckSelectionUI();
+    }
+
+    function updateDeckSelectionUI() {
+      const count = selectedDeckIds.size;
+
+      // Update Bulk Action Toolbar & Count Badges
+      const actionsBar = document.getElementById('deck-table-bulk-actions');
+      document.querySelectorAll('.selected-table-count').forEach(el => el.innerText = count);
+      if (actionsBar) {
+        if (count > 0) actionsBar.classList.remove('hidden');
+        else actionsBar.classList.add('hidden');
+      }
+
+      // Update Staging Button
+      const btnStage = document.getElementById('btn-stage-selected');
+      const countEl = document.getElementById('selected-table-decks-count');
+      if (countEl) countEl.innerText = count;
+      if (btnStage) {
+        if (count > 0) btnStage.classList.remove('hidden');
+        else btnStage.classList.add('hidden');
+      }
+
+      // Update Select-All Checkbox for Current Page
+      const selectAll = document.getElementById('deck-table-select-all');
+      if (selectAll) {
+        const startIdx = (currentDeckPage - 1) * deckPageSize;
+        const pageDecks = currentRenderedDecks.slice(startIdx, startIdx + deckPageSize);
+        if (pageDecks.length > 0 && pageDecks.every(d => selectedDeckIds.has(String(d.id)))) {
+          selectAll.checked = true;
+        } else {
+          selectAll.checked = false;
+        }
+      }
+    }
+
+    // Alias for any existing inline handlers
+    function onDeckRowCheckboxChange() {
+      updateDeckSelectionUI();
+    }
+
+    function stageSelectedDecks() {
+      if (selectedDeckIds.size === 0) return;
+
+      selectedDeckIds.forEach(sId => {
         if (!stagedDecks[sId]) {
           const found = decksData.find(d => String(d.id) === sId);
           if (found) {
@@ -1724,30 +1886,7 @@
       saveStagedDecksToStorage();
       updateStagingUI();
       renderDecksTable(currentRenderedDecks);
-      
-      // Uncheck select-all
-      const selectAll = document.getElementById('deck-table-select-all');
-      if (selectAll) selectAll.checked = false;
-      onDeckRowCheckboxChange();
-    }
-
-    function toggleSelectAllDeckRows(checked) {
-      document.querySelectorAll('.deck-row-checkbox').forEach(cb => cb.checked = checked);
-      onDeckRowCheckboxChange();
-    }
-
-    function onDeckRowCheckboxChange() {
-      const checkedCount = document.querySelectorAll('.deck-row-checkbox:checked').length;
-      const btn = document.getElementById('btn-stage-selected');
-      const countEl = document.getElementById('selected-table-decks-count');
-      if (btn && countEl) {
-        countEl.innerText = checkedCount;
-        if (checkedCount > 0) {
-          btn.classList.remove('hidden');
-        } else {
-          btn.classList.add('hidden');
-        }
-      }
+      clearDeckSelection();
     }
 
     function updateStagingUI() {
@@ -2021,7 +2160,7 @@
         localStorage.setItem('lerne_admin_tab', tab);
       } catch (e) {}
 
-      ['users', 'decks', 'ai', 'bulk', 'classification', 'backups'].forEach(t => {
+      ['users', 'decks', 'folders', 'ai', 'bulk', 'classification', 'backups'].forEach(t => {
         const contentEl = document.getElementById(`content-${t}`);
         if (contentEl) contentEl.classList.add('hidden');
         const btn = document.getElementById(`tab-${t}`);
@@ -2039,7 +2178,9 @@
         activeBtn.classList.remove('text-slate-400');
       }
 
-      if (tab === 'backups') {
+      if (tab === 'folders') {
+        loadAdminFolders();
+      } else if (tab === 'backups') {
         loadBackups();
       } else if (tab === 'bulk') {
         initBulkCreator();
@@ -2048,6 +2189,7 @@
       } else if (tab === 'classification') {
         lucide.createIcons();
       }
+      lucide.createIcons();
     }
 
     async function checkSavedCheckpoint(isInit = false) {
@@ -2440,6 +2582,7 @@
 
     function viewUserDecks(userId, userName) {
       activeUserFilter = userId;
+      clearDeckSelection();
       document.getElementById('user-filter-name').innerText = `${userName} (ID: ${userId})`;
       document.getElementById('user-filter-banner').classList.remove('hidden');
       switchTab('decks');
@@ -2448,6 +2591,7 @@
 
     function clearUserFilter() {
       activeUserFilter = null;
+      clearDeckSelection();
       document.getElementById('user-filter-banner').classList.add('hidden');
       document.getElementById('deck-search').value = '';
       loadDecks();
@@ -2531,10 +2675,12 @@
           `;
         }
 
+        const isDeckChecked = selectedDeckIds.has(String(d.id));
+
         return `
           <tr class="hover:bg-slate-900/50 transition">
             <td class="px-4 py-3.5 text-center">
-              <input type="checkbox" class="deck-row-checkbox w-4 h-4 text-indigo-600 rounded cursor-pointer" value="${d.id}" onchange="onDeckRowCheckboxChange()">
+              <input type="checkbox" class="deck-row-checkbox w-4 h-4 text-indigo-600 rounded cursor-pointer" value="${d.id}" ${isDeckChecked ? 'checked' : ''} onchange="toggleDeckRowSelection('${d.id}', this.checked)">
             </td>
             <td class="px-4 py-3.5 font-mono text-xs text-slate-400">#${d.id}</td>
             <td class="px-6 py-3.5 font-bold text-white">
@@ -2571,6 +2717,15 @@
               <button onclick="openAssignModal('${d.id}', '${safeName}')" title="👥 Раздать колоду" class="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 text-xs font-medium rounded-lg border border-indigo-500/20 transition">
                 👥
               </button>
+              <button onclick="promoteToLibrary('deck', '${d.id}', '${safeName}')" title="⭐ В Библиотеку" class="px-2.5 py-1 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 text-xs font-bold rounded-lg border border-amber-500/30 transition">
+                ⭐
+              </button>
+              <button onclick="overwriteAllUsers('deck', '${d.id}', '${safeName}')" title="🔄 Обновить у всех (полная замена)" class="px-2.5 py-1 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 text-xs font-bold rounded-lg border border-cyan-500/30 transition">
+                🔄
+              </button>
+              <button onclick="openCollaborativeModal('deck', '${d.id}', '${safeName}')" title="🤝 Сделать совместной" class="px-2.5 py-1 bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 text-xs font-bold rounded-lg border border-violet-500/30 transition">
+                🤝
+              </button>
               <button onclick="deduplicateDeck('${d.id}', '${safeName}')" title="🧹 Очистить дубликаты" class="px-2 py-1 text-amber-400 hover:bg-amber-500/10 rounded-lg text-xs transition">
                 <i data-lucide="sparkles" class="w-3.5 h-3.5 inline"></i>
               </button>
@@ -2584,6 +2739,7 @@
 
       tbody.innerHTML = rows.join('');
       lucide.createIcons();
+      updateDeckSelectionUI();
 
       const endIdx = Math.min(startIdx + deckPageSize, total);
       document.getElementById('deck-pagination-info').innerText = `Показано ${startIdx + 1}–${endIdx} из ${total} колод`;
@@ -2592,31 +2748,14 @@
       document.getElementById('btn-deck-next').disabled = (currentDeckPage >= totalPages);
     }
 
-    function onDeckRowCheckboxChange() {
-      const checkedBoxes = document.querySelectorAll('.deck-row-checkbox:checked');
-      const count = checkedBoxes.length;
-      const actionsBar = document.getElementById('deck-table-bulk-actions');
-      document.querySelectorAll('.selected-table-count').forEach(el => el.innerText = count);
-      
-      if (actionsBar) {
-        if (count > 0) {
-          actionsBar.classList.remove('hidden');
-        } else {
-          actionsBar.classList.add('hidden');
-        }
-      }
-    }
-
     function startBatchFromSelection(mode = 'ai') {
-      const checkedBoxes = document.querySelectorAll('.deck-row-checkbox:checked');
-      if (checkedBoxes.length === 0) {
+      if (selectedDeckIds.size === 0) {
         alert("Выберите хотя бы одну колоду чекбоксом!");
         return;
       }
 
       stagedDecks = {};
-      checkedBoxes.forEach(cb => {
-        const sId = String(cb.value);
+      selectedDeckIds.forEach(sId => {
         const found = decksData.find(d => String(d.id) === sId);
         if (found) {
           stagedDecks[sId] = {
@@ -2643,10 +2782,10 @@
       renderDecksTable(currentRenderedDecks);
     }
 
-    function filterDecks() {
-      const q = document.getElementById('deck-search').value.toLowerCase().trim();
+    function filterDecks(resetPage = true) {
+      const q = (document.getElementById('deck-search')?.value || '').toLowerCase().trim();
       if (!q) {
-        renderDecksTable(decksData, true);
+        renderDecksTable(decksData, resetPage);
         return;
       }
 
@@ -2656,7 +2795,7 @@
         String(d.user_id).includes(q) || 
         (d.target_language && d.target_language.toLowerCase().includes(q))
       );
-      renderDecksTable(filtered, true);
+      renderDecksTable(filtered, resetPage);
     }
 
     async function toggleDefaultDeck(deckId, newDefault) {
@@ -2739,12 +2878,15 @@
 
     async function loadDecksSilent() {
       try {
+        // Protect user selection: if user has any active selections, do NOT silently re-render!
+        if (selectedDeckIds.size > 0) return;
+
         const uid = activeUserFilter;
         const url = uid ? `/api/admin/decks?user_id=${uid}` : '/api/admin/decks';
         const res = await fetch(url);
         const data = await res.json();
         decksData = data.decks || [];
-        filterDecks();
+        filterDecks(false);
       } catch (e) {
         // silent
       }
@@ -2756,6 +2898,8 @@
         const res = await fetch(`/api/admin/decks/${deckId}`, { method: 'DELETE' });
         if (res.ok) {
           removeStagedDeck(deckId);
+          selectedDeckIds.delete(String(deckId));
+          updateDeckSelectionUI();
           loadDecks();
         } else {
           const err = await res.json();
@@ -2767,9 +2911,11 @@
     }
 
     async function deleteSelectedDecks() {
-      const checkedBoxes = document.querySelectorAll('.deck-row-checkbox:checked');
-      if (checkedBoxes.length === 0) return;
-      const deckIds = Array.from(checkedBoxes).map(cb => String(cb.value));
+      const deckIds = Array.from(selectedDeckIds);
+      if (deckIds.length === 0) {
+        alert("Выберите хотя бы одну колоду чекбоксом!");
+        return;
+      }
       if (!confirm(`Вы действительно хотите удалить ${deckIds.length} выбранных колод и все карточки в них?`)) return;
 
       try {
@@ -2780,10 +2926,11 @@
         });
         const data = await res.json();
         if (res.ok) {
-          deckIds.forEach(id => removeStagedDeck(id));
-          const selectAll = document.getElementById('deck-table-select-all');
-          if (selectAll) selectAll.checked = false;
-          onDeckRowCheckboxChange();
+          deckIds.forEach(id => {
+            removeStagedDeck(id);
+            selectedDeckIds.delete(String(id));
+          });
+          clearDeckSelection();
           loadDecks();
         } else {
           alert("Ошибка при массовом удалении колод: " + (data.detail || "Неизвестная ошибка"));
@@ -2847,109 +2994,279 @@
 
     let foldersData = [];
     let activeAssignFolderId = null;
+    let folderFilterMode = 'all';
+    let folderUserFilter = null;
+
+    function openFoldersModal() {
+      switchTab('folders');
+    }
+
+    function setFolderFilter(mode) {
+      folderFilterMode = mode;
+      ['all', 'default', 'custom', 'with_decks', 'empty'].forEach(m => {
+        const btn = document.getElementById(`folder-filter-${m}`);
+        if (btn) {
+          if (m === mode) {
+            btn.className = 'px-2.5 py-1 rounded font-semibold transition bg-indigo-600 text-white';
+          } else {
+            btn.className = 'px-2.5 py-1 rounded font-semibold transition text-slate-400 hover:text-white';
+          }
+        }
+      });
+      renderFoldersList();
+    }
+
+    function filterFoldersByUser(userId, userName) {
+      folderUserFilter = userId;
+      const banner = document.getElementById('folder-user-filter-banner');
+      const nameEl = document.getElementById('folder-user-filter-name');
+      if (banner && nameEl) {
+        nameEl.innerText = `${userName} (ID: ${userId})`;
+        banner.classList.remove('hidden');
+      }
+      switchTab('folders');
+      renderFoldersList();
+    }
+
+    function clearFolderUserFilter() {
+      folderUserFilter = null;
+      const banner = document.getElementById('folder-user-filter-banner');
+      if (banner) banner.classList.add('hidden');
+      renderFoldersList();
+    }
 
     async function loadAdminFolders() {
       try {
         const res = await fetch('/api/admin/folders');
         const data = await res.json();
         foldersData = data.folders || [];
+
+        // Update count buttons and badges
         const btnCount = document.getElementById('folders-count-btn');
         if (btnCount) btnCount.innerText = foldersData.length;
+        const tabBadge = document.getElementById('folders-tab-badge');
+        if (tabBadge) tabBadge.innerText = foldersData.length;
+        const statsBadge = document.getElementById('folders-stats-badge');
+        if (statsBadge) statsBadge.innerText = `${foldersData.length} папок`;
+
+        // Update 4 overview metric cards
+        let totalDecks = 0;
+        let totalCards = 0;
+        let totalDefault = 0;
+        foldersData.forEach(f => {
+          totalDecks += (f.deck_count || 0);
+          totalCards += (f.cards_count || 0);
+          if (f.is_default) totalDefault += 1;
+        });
+
+        const elTot = document.getElementById('stat-folders-total');
+        if (elTot) elTot.innerText = foldersData.length;
+        const elDk = document.getElementById('stat-folders-decks');
+        if (elDk) elDk.innerText = totalDecks;
+        const elCd = document.getElementById('stat-folders-cards');
+        if (elCd) elCd.innerText = totalCards;
+        const elDf = document.getElementById('stat-folders-default');
+        if (elDf) elDf.innerText = totalDefault;
+
         renderFoldersList();
       } catch (err) {
         console.error("Error loading folders:", err);
       }
     }
 
-    function openFoldersModal() {
-      document.getElementById('modal-folders-manager').classList.remove('hidden');
-      loadAdminFolders();
-    }
-
     function renderFoldersList() {
-      const listEl = document.getElementById('folders-modal-list');
+      const listEl = document.getElementById('folders-list') || document.getElementById('folders-modal-list');
       if (!listEl) return;
 
       const q = (document.getElementById('folder-search')?.value || '').toLowerCase().trim();
-      let filtered = foldersData;
+      let filtered = foldersData || [];
+
+      // Filter by user if selected
+      if (folderUserFilter) {
+        filtered = filtered.filter(f => String(f.user_id) === String(folderUserFilter));
+      }
+
+      // Filter by mode pill
+      if (folderFilterMode === 'default') {
+        filtered = filtered.filter(f => f.is_default);
+      } else if (folderFilterMode === 'custom') {
+        filtered = filtered.filter(f => !f.is_default);
+      } else if (folderFilterMode === 'with_decks') {
+        filtered = filtered.filter(f => (f.deck_count || 0) > 0);
+      } else if (folderFilterMode === 'empty') {
+        filtered = filtered.filter(f => (f.deck_count || 0) === 0);
+      }
+
+      // Filter by search query
       if (q) {
         filtered = filtered.filter(f => 
           (f.name && f.name.toLowerCase().includes(q)) ||
           (f.user_name && f.user_name.toLowerCase().includes(q)) ||
-          String(f.user_id).includes(q)
+          String(f.user_id).includes(q) ||
+          String(f.id).includes(q) ||
+          (f.target_language && f.target_language.toLowerCase().includes(q)) ||
+          (f.decks && f.decks.some(d => d.name && d.name.toLowerCase().includes(q)))
         );
       }
 
       if (filtered.length === 0) {
-        listEl.innerHTML = '<div class="p-8 text-center text-slate-500">Папки не найдены</div>';
+        listEl.innerHTML = `
+          <div class="glass p-12 text-center rounded-2xl border border-slate-800 text-slate-400 space-y-2">
+            <i data-lucide="folder-x" class="w-10 h-10 mx-auto text-slate-500 mb-2"></i>
+            <div class="text-base font-semibold text-slate-300">Папки не найдены</div>
+            <div class="text-xs text-slate-500">Попробуйте изменить поисковый запрос или сбросить фильтры</div>
+          </div>
+        `;
+        lucide.createIcons();
+        onFolderRowCheckboxChange();
         return;
       }
 
       listEl.innerHTML = filtered.map(f => {
         const safeName = (f.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const safeUserName = (f.user_name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         const isDefault = f.is_default;
         
         let avatarEl = '';
         if (f.user_photo) {
-          avatarEl = `<img src="${f.user_photo}" class="w-7 h-7 rounded-full object-cover border border-slate-700" alt="avatar" />`;
+          avatarEl = `<img src="${f.user_photo}" class="w-7 h-7 rounded-full object-cover border border-slate-700 shrink-0" alt="avatar" />`;
         } else {
-          avatarEl = `<div class="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-400">👤</div>`;
+          avatarEl = `<div class="w-7 h-7 rounded-full ${f.user_is_guest ? 'bg-slate-800 text-slate-400' : 'bg-indigo-600 text-white'} border border-slate-700 flex items-center justify-center text-[10px] font-bold shrink-0">${f.user_is_guest ? '👻' : (f.user_name || 'U')[0].toUpperCase()}</div>`;
         }
 
-        const decksBadges = (f.decks || []).map(d => `<span class="px-1.5 py-0.5 bg-slate-900 text-slate-300 rounded text-[10px] border border-slate-800">${d.name}</span>`).join(' ');
+        // Decks inside this folder
+        let decksContent = '';
+        if (f.decks && f.decks.length > 0) {
+          const deckItems = f.decks.map(d => {
+            const safeDeckName = (d.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            return `
+              <div class="bg-slate-950/80 border border-slate-800/80 hover:border-slate-700 p-2.5 rounded-xl flex items-center justify-between gap-2 transition group">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-mono text-[11px] text-indigo-400">#${d.id}</span>
+                    <span class="text-xs font-bold text-slate-200 truncate group-hover:text-indigo-300 transition" title="${d.name}">${d.name}</span>
+                  </div>
+                  <div class="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                    <span class="text-emerald-400 font-semibold">${d.card_count || 0} карт.</span>
+                    ${d.level ? `<span class="uppercase text-slate-500 font-mono">${d.level}</span>` : ''}
+                    <span class="uppercase text-slate-500 font-mono">${d.target_language || f.target_language || ''}</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                  <button type="button" onclick="openDeckPreviewModal('${d.id}', '${safeDeckName}')" title="👁️ Предосмотр колоды" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition">
+                    <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                  </button>
+                  <button type="button" onclick="openRegenModal('${d.id}', '${safeDeckName}', 'context_only')" title="✨ Догенерировать контекст" class="p-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 rounded-lg border border-purple-500/20 transition">
+                    <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                  </button>
+                  <button type="button" onclick="openRegenModal('${d.id}', '${safeDeckName}', 'audio_only')" title="🎙️ Озвучить колоду (TTS)" class="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 rounded-lg border border-emerald-500/20 transition">
+                    <i data-lucide="mic" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          decksContent = `
+            <div class="mt-3 pt-3 border-t border-slate-800/80">
+              <div class="text-xs font-semibold text-slate-400 mb-2 flex items-center justify-between">
+                <span>Входящие колоды (${f.decks.length}):</span>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                ${deckItems}
+              </div>
+            </div>
+          `;
+        } else {
+          decksContent = `
+            <div class="mt-2 text-xs text-slate-500 italic flex items-center gap-1.5">
+              <span>⚪ В этой папке нет активных колод</span>
+            </div>
+          `;
+        }
 
         return `
-          <div class="glass p-3.5 rounded-xl border border-slate-800 hover:border-slate-700 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/60">
-            <div class="flex items-start gap-3 flex-1 min-w-0">
-              <input type="checkbox" class="folder-row-checkbox w-4 h-4 text-indigo-600 rounded cursor-pointer shrink-0 mt-1" value="${f.id}" onchange="onFolderRowCheckboxChange()">
-              <div class="space-y-1.5 flex-1 min-w-0">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <span class="w-3 h-3 rounded-full shrink-0" style="background-color: ${f.color}"></span>
-                  <span class="font-bold text-sm text-white truncate">${f.name}</span>
-                  <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950/60 text-indigo-300 border border-indigo-500/30">
-                    📁 ${f.deck_count} колод • 🗂️ ${f.cards_count} карт.
-                  </span>
-                  <span class="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-slate-800 text-slate-400">
-                    ${f.target_language}
-                  </span>
-                  ${isDefault 
-                    ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">★ ДЕФОЛТНАЯ</span>` 
-                    : ''}
-                </div>
+          <div class="glass p-5 rounded-2xl border border-slate-800 hover:border-slate-700 transition bg-slate-900/70 shadow-lg space-y-3.5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <!-- Left: Checkbox + Folder Title + Badges -->
+              <div class="flex items-start gap-3 flex-1 min-w-0">
+                <input type="checkbox" class="folder-row-checkbox w-4 h-4 text-indigo-600 rounded cursor-pointer shrink-0 mt-1" value="${f.id}" onchange="onFolderRowCheckboxChange()">
+                <div class="space-y-1.5 flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm" style="background-color: ${f.color}"></span>
+                    <span class="font-bold text-base text-white truncate">${f.name}</span>
+                    <span class="px-2 py-0.5 rounded-md text-[11px] font-mono text-slate-400 bg-slate-800 border border-slate-700">#${f.id}</span>
+                    <span class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-indigo-950/80 text-indigo-300 border border-indigo-500/30">
+                      📁 ${f.deck_count} колод • 🗂️ ${f.cards_count} карт.
+                    </span>
+                    <span class="px-2 py-0.5 rounded-md text-xs font-mono font-bold uppercase bg-slate-800 text-slate-300 border border-slate-700">
+                      ${f.target_language}
+                    </span>
+                    ${isDefault 
+                      ? `<span class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">★ ДЕФОЛТНАЯ</span>` 
+                      : `<span class="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-800 text-slate-400">☆ Обычная</span>`}
+                  </div>
 
-                <div class="flex items-center gap-2 text-xs text-slate-400">
-                  ${avatarEl}
-                  <span class="truncate">Владелец: <b class="text-slate-200">${f.user_name}</b> <span class="font-mono text-[11px] text-slate-500">(ID: ${f.user_id})</span></span>
+                  <!-- Owner Info with Quick Action Links -->
+                  <div class="flex items-center gap-2 text-xs text-slate-400 flex-wrap pt-0.5">
+                    ${avatarEl}
+                    <span class="truncate">Владелец: <b class="text-slate-200">${f.user_name}</b> <span class="font-mono text-[11px] text-slate-500">(ID: ${f.user_id})</span></span>
+                    ${f.user_is_guest ? '<span class="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] text-slate-400">(гость)</span>' : ''}
+                    <span class="text-slate-600">•</span>
+                    <button onclick="viewUserDecks('${f.user_id}', '${safeUserName}')" title="Посмотреть все колоды этого пользователя" class="text-indigo-400 hover:text-indigo-300 font-medium hover:underline text-xs inline-flex items-center gap-1">
+                      <i data-lucide="layers" class="w-3 h-3"></i> Все колоды
+                    </button>
+                    <button onclick="filterFoldersByUser('${f.user_id}', '${safeUserName}')" title="Фильтровать папки только этого пользователя" class="text-purple-400 hover:text-purple-300 font-medium hover:underline text-xs inline-flex items-center gap-1">
+                      <i data-lucide="filter" class="w-3 h-3"></i> Папки юзера
+                    </button>
+                  </div>
                 </div>
+              </div>
 
-                ${decksBadges ? `<div class="flex items-center gap-1.5 flex-wrap pt-0.5">${decksBadges}</div>` : ''}
+              <!-- Right: Folder Action Buttons -->
+              <div class="flex items-center gap-2 shrink-0 self-end sm:self-center flex-wrap">
+                <button onclick="openFolderRegenModal(${f.id})" 
+                  class="px-3.5 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-90 text-white transition flex items-center gap-1.5 shadow-md shadow-purple-500/20"
+                  title="Перегенерировать все ${f.deck_count} колод этой папки">
+                  <i data-lucide="zap" class="w-3.5 h-3.5"></i> ⚡ В перегенерацию (${f.deck_count})
+                </button>
+                <button onclick="toggleDefaultFolder(${f.id}, ${!isDefault})" 
+                  class="px-3 py-2 text-xs font-bold rounded-xl border transition flex items-center gap-1 ${
+                    isDefault 
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30' 
+                      : 'bg-purple-600/20 text-purple-300 border-purple-500/40 hover:bg-purple-600/30'
+                  }">
+                  ${isDefault ? '★ Снять дефолт' : '🌟 Для ВСЕХ'}
+                </button>
+                <button onclick="openAssignFolderModal(${f.id}, '${safeName}')" 
+                  class="px-3 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 shadow-md shadow-indigo-500/20">
+                  👥 Раздать
+                </button>
+                <button onclick="promoteToLibrary('folder', ${f.id}, '${safeName}')" 
+                  class="px-3 py-2 text-xs font-bold rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 transition flex items-center gap-1"
+                  title="Добавить папку со всеми колодами в Мастер-Библиотеку">
+                  ⭐ В Библиотеку
+                </button>
+                <button onclick="overwriteAllUsers('folder', ${f.id}, '${safeName}')" 
+                  class="px-3 py-2 text-xs font-bold rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 transition flex items-center gap-1"
+                  title="Полностью заменить папку у всех пользователей, у которых она есть">
+                  🔄 Обновить
+                </button>
+                <button onclick="openCollaborativeModal('folder', ${f.id}, '${safeName}')" 
+                  class="px-3 py-2 text-xs font-bold rounded-xl bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 transition flex items-center gap-1"
+                  title="Сделать папку совместной">
+                  🤝 Совместная
+                </button>
+                <button onclick="deleteAdminFolder(${f.id}, '${safeName}', ${f.deck_count})" 
+                  class="px-3 py-2 text-xs font-bold rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 transition flex items-center gap-1"
+                  title="Удалить папку и все входящие в неё колоды">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Удалить
+                </button>
               </div>
             </div>
 
-            <div class="flex items-center gap-2 shrink-0 self-end sm:self-center flex-wrap sm:flex-nowrap">
-              <button onclick="openFolderRegenModal(${f.id})" 
-                class="px-3 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-90 text-white transition flex items-center gap-1.5 shadow-md shadow-purple-500/20"
-                title="Перегенерировать все ${f.deck_count} колод этой папки">
-                <i data-lucide="zap" class="w-3.5 h-3.5"></i> ⚡ В перегенерацию (${f.deck_count})
-              </button>
-              <button onclick="toggleDefaultFolder(${f.id}, ${!isDefault})" 
-                class="px-3 py-1.5 text-xs font-bold rounded-lg border transition flex items-center gap-1 ${
-                  isDefault 
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30' 
-                    : 'bg-purple-600/20 text-purple-300 border-purple-500/40 hover:bg-purple-600/30'
-                }">
-                ${isDefault ? '★ Снять дефолт' : '🌟 Для ВСЕХ'}
-              </button>
-              <button onclick="openAssignFolderModal(${f.id}, '${safeName}')" 
-                class="px-3 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1">
-                👥 Раздать
-              </button>
-              <button onclick="deleteAdminFolder(${f.id}, '${safeName}', ${f.deck_count})" 
-                class="px-3 py-1.5 text-xs font-bold rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 transition flex items-center gap-1"
-                title="Удалить папку и все входящие в неё колоды">
-                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Удалить
-              </button>
-            </div>
+            <!-- Decks Container inside Folder -->
+            ${decksContent}
           </div>
         `;
       }).join('');
@@ -3099,6 +3416,16 @@
         return toggleDefaultFolder(activeAssignFolderId, true);
       }
 
+      if (mode === 'library') {
+        closeModal('modal-assign-folder');
+        return promoteToLibrary('folder', activeAssignFolderId, document.getElementById('modal-assign-folder-title').innerText.replace('Раздать папку: ', ''));
+      }
+
+      if (mode === 'overwrite_all') {
+        closeModal('modal-assign-folder');
+        return overwriteAllUsers('folder', activeAssignFolderId, document.getElementById('modal-assign-folder-title').innerText.replace('Раздать папку: ', ''));
+      }
+
       if (selectedUsers.length === 0) {
         alert("Выберите хотя бы одного пользователя для раздачи!");
         return;
@@ -3164,7 +3491,6 @@
       renderFolderRegenDecksList();
       updateFolderRegenSummary();
 
-      closeModal('modal-folders-manager');
       document.getElementById('modal-folder-regen').classList.remove('hidden');
       lucide.createIcons();
     }
@@ -5562,8 +5888,192 @@
     }
 
     function closeModal(id) {
-      document.getElementById(id).classList.add('hidden');
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    }
+
+    // ── New: Promote to Library (1-click) ────────────────────────────────────
+    async function promoteToLibrary(entityType, entityId, entityName) {
+      const label = entityType === 'folder' ? 'папку' : 'колоду';
+      if (!confirm(`⭐ Добавить ${label} «${entityName}» в Мастер-Библиотеку?\n\nЕсли она уже есть в библиотеке — карточки будут заменены.`)) return;
+      try {
+        const endpoint = entityType === 'folder'
+          ? `/api/admin/folders/${entityId}/to-library`
+          : `/api/admin/decks/${entityId}/to-library`;
+        const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const data = await res.json();
+        alert(data.message || `${label} успешно добавлена в Библиотеку!`);
+        if (entityType === 'folder') loadAdminFolders(); else loadDecks();
+      } catch (err) {
+        alert('Ошибка: ' + err);
+      }
+    }
+
+    // ── New: Overwrite All Users (1-click) ────────────────────────────────────
+    async function overwriteAllUsers(entityType, entityId, entityName) {
+      const label = entityType === 'folder' ? 'папку' : 'колоду';
+      if (!confirm(`🔄 Полностью заменить ${label} «${entityName}» у всех пользователей, у которых она есть?\n\n⚠️ Это удалит весь прогресс обучения (SRS) пользователей по этой ${label}!\n\nПродолжить?`)) return;
+      try {
+        const endpoint = entityType === 'folder'
+          ? `/api/admin/folders/${entityId}/overwrite-users`
+          : `/api/admin/decks/${entityId}/overwrite-users`;
+        const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const data = await res.json();
+        alert(data.message || `Обновление выполнено для ${data.users_processed || 0} пользователей.`);
+        if (entityType === 'folder') loadAdminFolders(); else loadDecks();
+      } catch (err) {
+        alert('Ошибка: ' + err);
+      }
+    }
+
+    // ── New: Collaborative Modal ──────────────────────────────────────────────
+    let activeCollaborativeType = null;
+    let activeCollaborativeId = null;
+
+    function openCollaborativeModal(entityType, entityId, entityName) {
+      activeCollaborativeType = entityType;
+      activeCollaborativeId = entityId;
+      const label = entityType === 'folder' ? 'папку' : 'колоду';
+      document.getElementById('modal-collaborative-title').innerText = `🤝 Сделать ${label} совместной: ${entityName}`;
+
+      // Reset form
+      document.querySelector('input[name="collab-audience"][value="existing_copies"]').checked = true;
+      document.querySelector('input[name="collab-role"][value="viewer"]').checked = true;
+      document.getElementById('collab-delete-copies').checked = true;
+      document.getElementById('collab-notify').checked = false;
+
+      // Build user list for manual selection
+      const container = document.getElementById('collab-users-list');
+      container.innerHTML = '';
+      (usersData || []).forEach(u => {
+        container.innerHTML += `
+          <label class="flex items-center gap-3 p-2 hover:bg-slate-900 rounded-lg cursor-pointer">
+            <input type="checkbox" name="collab-user" value="${u.user_id}" class="w-4 h-4 text-violet-600 rounded">
+            <span class="text-xs text-slate-200 font-medium">${u.first_name || ''} (@${u.username || 'no_user'}) — ID: ${u.user_id}</span>
+          </label>
+        `;
+      });
+      updateCollabUsersVisibility();
+      document.getElementById('modal-collaborative').classList.remove('hidden');
+    }
+
+    function updateCollabUsersVisibility() {
+      const audience = document.querySelector('input[name="collab-audience"]:checked')?.value;
+      const usersSection = document.getElementById('collab-users-section');
+      if (usersSection) {
+        usersSection.classList.toggle('hidden', audience !== 'selected');
+      }
+    }
+
+    async function submitCollaborative() {
+      const audience = document.querySelector('input[name="collab-audience"]:checked')?.value || 'existing_copies';
+      const role = document.querySelector('input[name="collab-role"]:checked')?.value || 'viewer';
+      const deleteExisting = document.getElementById('collab-delete-copies')?.checked ?? true;
+      const notify = document.getElementById('collab-notify')?.checked ?? false;
+      const selectedUsers = Array.from(document.querySelectorAll('input[name="collab-user"]:checked')).map(cb => parseInt(cb.value));
+
+      if (audience === 'selected' && selectedUsers.length === 0) {
+        alert('Выберите хотя бы одного пользователя!');
+        return;
+      }
+
+      const deleteWarning = deleteExisting ? '\n⚠️ Личные копии у выбранных пользователей будут УДАЛЕНЫ.' : '';
+      if (!confirm(`🤝 Открыть совместный доступ (роль: ${role}, аудитория: ${audience})?${deleteWarning}\n\nПрогресс обучения по удалённым копиям будет утерян. Продолжить?`)) return;
+
+      try {
+        const endpoint = activeCollaborativeType === 'folder'
+          ? `/api/admin/folders/${activeCollaborativeId}/assign`
+          : `/api/admin/decks/${activeCollaborativeId}/assign`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'collaborate',
+            target_audience: audience,
+            collaborator_role: role,
+            delete_existing_copies: deleteExisting,
+            notify_telegram: notify,
+            user_ids: selectedUsers
+          })
+        });
+        const data = await res.json();
+        closeModal('modal-collaborative');
+        alert(data.message || `Совместный доступ выдан!`);
+        if (activeCollaborativeType === 'folder') loadAdminFolders(); else loadDecks();
+      } catch (err) {
+        alert('Ошибка: ' + err);
+      }
     }
   </script>
+
+  <!-- Modal: Collaborative Access -->
+  <div id="modal-collaborative" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass max-w-lg w-full p-6 rounded-2xl border border-violet-500/30 space-y-5 shadow-2xl shadow-violet-500/10">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-lg text-white" id="modal-collaborative-title">🤝 Сделать совместной</h3>
+        <button onclick="closeModal('modal-collaborative')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <!-- Audience -->
+      <div>
+        <label class="block text-xs font-semibold uppercase text-slate-400 mb-2">Целевая аудитория:</label>
+        <div class="space-y-2">
+          <label class="p-2.5 bg-slate-900 border border-slate-800 rounded-xl cursor-pointer hover:border-violet-500 flex items-center gap-2 text-xs">
+            <input type="radio" name="collab-audience" value="existing_copies" checked onchange="updateCollabUsersVisibility()" class="text-violet-600">
+            <span>👥 Все пользователи, у которых уже есть такая же (по имени)</span>
+          </label>
+          <label class="p-2.5 bg-slate-900 border border-slate-800 rounded-xl cursor-pointer hover:border-violet-500 flex items-center gap-2 text-xs">
+            <input type="radio" name="collab-audience" value="selected" onchange="updateCollabUsersVisibility()" class="text-violet-600">
+            <span>🎯 Выбрать вручную</span>
+          </label>
+          <label class="p-2.5 bg-rose-950/30 border border-rose-500/30 rounded-xl cursor-pointer hover:border-rose-500/60 flex items-center gap-2 text-xs">
+            <input type="radio" name="collab-audience" value="all" onchange="updateCollabUsersVisibility()" class="text-rose-500">
+            <span class="text-rose-300 font-bold">🌐 Все пользователи в системе</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Manual user selection (shown only for "selected") -->
+      <div id="collab-users-section" class="hidden">
+        <label class="block text-xs font-semibold uppercase text-slate-400 mb-2">Выберите пользователей:</label>
+        <div id="collab-users-list" class="max-h-40 overflow-y-auto space-y-1 bg-slate-950 p-3 rounded-xl border border-slate-900">
+          <!-- injected by JS -->
+        </div>
+      </div>
+
+      <!-- Role -->
+      <div>
+        <label class="block text-xs font-semibold uppercase text-slate-400 mb-2">Роль:</label>
+        <div class="grid grid-cols-2 gap-2.5">
+          <label class="p-2.5 bg-slate-900 border border-slate-800 rounded-xl cursor-pointer hover:border-violet-500 flex items-center gap-2 text-xs">
+            <input type="radio" name="collab-role" value="viewer" checked class="text-violet-600">
+            <span>👁️ Viewer — только изучение</span>
+          </label>
+          <label class="p-2.5 bg-slate-900 border border-slate-800 rounded-xl cursor-pointer hover:border-violet-500 flex items-center gap-2 text-xs">
+            <input type="radio" name="collab-role" value="editor" class="text-violet-600">
+            <span>✏️ Editor — редактирование</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Options -->
+      <div class="space-y-2">
+        <label class="flex items-center gap-3 p-2.5 bg-slate-900 border border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 text-xs">
+          <input type="checkbox" id="collab-delete-copies" checked class="w-4 h-4 text-violet-600 rounded">
+          <span class="text-slate-200">🗑️ Удалить личные копии у этих пользователей (консолидация)</span>
+        </label>
+        <label class="flex items-center gap-3 p-2.5 bg-slate-900 border border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 text-xs">
+          <input type="checkbox" id="collab-notify" class="w-4 h-4 text-violet-600 rounded">
+          <span class="text-slate-200">📱 Уведомить через Telegram (в разработке)</span>
+        </label>
+      </div>
+
+      <div class="flex justify-end gap-3 pt-1">
+        <button onclick="closeModal('modal-collaborative')" class="px-4 py-2 bg-slate-800 text-slate-300 text-sm font-medium rounded-lg">Отмена</button>
+        <button onclick="submitCollaborative()" class="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold rounded-lg shadow-md shadow-violet-500/30">🤝 Открыть доступ</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

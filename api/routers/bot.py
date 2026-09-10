@@ -109,8 +109,14 @@ async def start_handler(update: Update, context):
                     'telegram', str(user.id), now, now + PROOF_TTL,
                     hashlib.sha256(f'telegram-bot-start:{state}:{user.id}'.encode()).hexdigest())
                 confirm_challenge(state, proof)
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🚀 Вернуться в Lerne", url=TMA_URL)]
+                ])
                 await safe_send_reply(update,
-                    "✅ <b>Telegram подтверждён.</b> Вернитесь в Lerne: приложение завершит вход автоматически.")
+                    f"✅ <b>Вход через Telegram подтверждён.</b>\n\n"
+                    f"Вернитесь в Lerne — приложение завершит вход автоматически.",
+                    reply_markup=keyboard)
+
             except Exception as exc:
                 logger.info("Rejected Telegram auth challenge: %s", exc)
                 await safe_send_reply(update,

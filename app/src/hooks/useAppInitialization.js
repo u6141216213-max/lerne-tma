@@ -38,12 +38,7 @@ export const useAppInitialization = (checkStartParam) => {
           // leave the UI in the empty-decks state until the next reload.
           await useAuthStore.getState().startProvider('telegram').catch(() => ({ success: false }));
         }
-        // Only block if neither bearer token nor identified user exists
-        if (!profile?.user_id) {
-          useUiStore.getState().setIsAuthModalOpen(true, tr('Войдите, чтобы открыть свои колоды и прогресс'));
-          useUiStore.setState({ loading: false, hasInitialized: true });
-          return;
-        }
+        // No identified user — continue in guest mode without showing auth modal
       }
 
       // Instant UI restore from cache if available (synchronous)
@@ -218,7 +213,7 @@ export const useAppInitialization = (checkStartParam) => {
 
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-  // ⚠️ CRITICAL NETWORK STABILITY GUARANTEE: DO NOT REMOVE OR BYPASS RETRY LOGIC (requestWithRetry).
+  // WARNING: CRITICAL NETWORK STABILITY GUARANTEE: DO NOT REMOVE OR BYPASS RETRY LOGIC (requestWithRetry).
   // Required to protect against Supabase cloud DB cold starts, TCP disconnects, and backend reboots!
   const requestWithRetry = async (requestFn, label, attempts = 3) => {
     let lastError;
@@ -316,7 +311,7 @@ export const useAppInitialization = (checkStartParam) => {
       // If user opened a deck or refreshed, re-sync currentDeck & cards for current deck
       const uiState = useUiStore.getState();
       const savedDeckId = storage.get('lerne_current_deck_id');
-      const currDeck = useDeckStore.getState().currentDeck 
+      const currDeck = useDeckStore.getState().currentDeck
         || (savedDeckId ? freshDecks.find(d => String(d.id) === String(savedDeckId)) : null);
 
       if (currDeck) {
@@ -334,9 +329,8 @@ export const useAppInitialization = (checkStartParam) => {
     } catch (err) {
       console.error("Init Data Error:", err);
       const isAuthError = err?.response?.status === 401 || err?.status === 401;
-      if (isAuthError) {
-        useUiStore.getState().setIsAuthModalOpen(true, tr('Войдите, чтобы открыть свои колоды и прогресс'));
-      } else {
+      if (!isAuthError) {
+        // Auth errors are silent — user can log in manually via the profile/settings button
         const decksNow = useDeckStore.getState().decks;
         if (!decksNow || decksNow.length === 0) {
           showToast(tr("Ошибка загрузки данных."));
@@ -354,8 +348,8 @@ export const useAppInitialization = (checkStartParam) => {
       const { useLanguageStore } = await import('../store/useLanguageStore');
       const langState = useLanguageStore.getState();
 
-      const validFirstName = (currentProfile.first_name && currentProfile.first_name !== 'Пользователь') 
-        ? currentProfile.first_name 
+      const validFirstName = (currentProfile.first_name && currentProfile.first_name !== 'Пользователь')
+        ? currentProfile.first_name
         : undefined;
 
       const syncPayload = {

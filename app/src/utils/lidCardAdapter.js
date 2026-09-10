@@ -1,5 +1,6 @@
 import { stripMarkdown } from './text.js';
 import lidTranslations from '../data/lidTranslations.json' with { type: 'json' };
+import { shuffleFY } from './shuffle.js';
 
 const norm = (s) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
 
@@ -105,9 +106,7 @@ export const transformCardToExamQuestion = (card, examIndex = 1, { shuffle = tru
   });
 
   // 4. Randomly shuffle options if requested (default true)
-  const finalPairs = shuffle
-    ? [...optionPairs].sort(() => Math.random() - 0.5)
-    : [...optionPairs];
+  const finalPairs = shuffle ? shuffleFY(optionPairs) : [...optionPairs];
 
   const options = [];
   let correctOption = 'a';

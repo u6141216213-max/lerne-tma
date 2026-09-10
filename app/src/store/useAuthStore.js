@@ -48,6 +48,9 @@ export const useAuthStore = create((set, get) => ({
   authMethods: null,
   passwordSettings: null,
   showTelegramPrompt: false,
+  // URL opened for the current pending challenge; shown as a fallback link
+  // in AuthRequiredModal when the browser blocked the automatic popup.
+  authUrl: null,
 
   refreshAuthMethods: async () => {
     try {
@@ -89,7 +92,7 @@ export const useAuthStore = create((set, get) => ({
     stopPolling();
     const methods = await get().refreshAuthMethods();
     const prompt = suggestTelegram && methods && !methods.includes('telegram');
-    set({ isPolling: false, authModalOpen: Boolean(prompt), showTelegramPrompt: Boolean(prompt), authError: null });
+    set({ isPolling: false, authModalOpen: Boolean(prompt), showTelegramPrompt: Boolean(prompt), authError: null, authUrl: null });
     useUiStore.getState().setIsAuthModalOpen(Boolean(prompt));
     if (recovery) useUiStore.getState().openSettings('profile');
     useUiStore.getState().showToast(tr('Вход выполнен. Ваши колоды и прогресс доступны.'), 'success');
@@ -115,19 +118,21 @@ export const useAuthStore = create((set, get) => ({
         return { success: true };
       }
       const response = await api.post('/auth/v2/challenges', { provider, purpose });
+      const authUrl = response.data.authorization_url;
       const pending = { id: response.data.challenge_id, secret: response.data.secret, provider, purpose,
         expiresAt: response.data.expires_at, recovery };
       savePending(pending);
-      set({ isPolling: true, authError: null });
+      // Save URL so the modal can show a manual link if the popup was blocked.
+      set({ isPolling: true, authError: null, authUrl });
       get().beginPolling();
-      openExternalLink(response.data.authorization_url, preparedWindow);
+      openExternalLink(authUrl, preparedWindow);
       return { success: true };
     } catch (error) {
       try {
         if (preparedWindow && !preparedWindow.closed) preparedWindow.close();
       } catch { /* ignore popup cleanup errors */ }
       const message = authMessage(error, tr('Не удалось начать вход. Попробуйте ещё раз.'));
-      set({ isPolling: false, authError: message });
+      set({ isPolling: false, authError: message, authUrl: null });
       useUiStore.getState().showToast(message, 'error');
       return { success: false, error: message };
     } finally {
@@ -142,7 +147,7 @@ export const useAuthStore = create((set, get) => ({
   cancelPendingAuth: () => {
     clearPending();
     stopPolling();
-    set({ isPolling: false, authError: null });
+    set({ isPolling: false, authError: null, authUrl: null });
   },
 
   loginWithEmailPassword: async (email, password, register = false) => {
@@ -181,7 +186,7 @@ export const useAuthStore = create((set, get) => ({
     if (Date.parse(pending.expiresAt || '') <= Date.now()) {
       clearPending();
       stopPolling();
-      set({ isPolling: false, authError: tr('Время подтверждения истекло. Начните вход ещё раз.') });
+      set({ isPolling: false, authError: tr('Время подтверждения истекло. Начните вход ещё раз.'), authUrl: null });
       return false;
     }
     exchangeInFlight = true;
@@ -192,7 +197,7 @@ export const useAuthStore = create((set, get) => ({
         clearPending();
         stopPolling();
         await get().refreshAuthMethods();
-        set({ isPolling: false, authModalOpen: false, showTelegramPrompt: false });
+        set({ isPolling: false, authModalOpen: false, showTelegramPrompt: false, authUrl: null });
         useUiStore.getState().setIsAuthModalOpen(false);
         useUiStore.getState().showToast(tr('Способ входа привязан.'), 'success');
       } else {
@@ -206,7 +211,7 @@ export const useAuthStore = create((set, get) => ({
       if (detail === 'invalid_challenge') return false;
       clearPending();
       stopPolling();
-      set({ isPolling: false });
+      set({ isPolling: false, authUrl: null });
       const message = authMessage(error, tr('Не удалось завершить вход.'));
       set({ authError: message });
       useUiStore.getState().showToast(message, 'error');
@@ -233,7 +238,7 @@ export const useAuthStore = create((set, get) => ({
     clearAuthSession();
     clearPending();
     stopPolling();
-    set({ userProfile: null, isPolling: false, authMethods: null, passwordSettings: null, showTelegramPrompt: false });
+    set({ userProfile: null, isPolling: false, authMethods: null, passwordSettings: null, showTelegramPrompt: false, authUrl: null });
     useUiStore.setState({ userProfile: null });
   },
   initListeners: () => {

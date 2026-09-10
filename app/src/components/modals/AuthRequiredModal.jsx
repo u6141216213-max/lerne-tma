@@ -12,7 +12,7 @@ export const AuthRequiredModal = ({ isOpen, onClose, title = tr('Вход в а�
   const [emailLoading, setEmailLoading] = useState(false);
   const [recovery, setRecovery] = useState(false);
   const dialog = useRef(null);
-  const { isPolling, isStarting, authError, startTelegramLinking, startGoogleLogin, checkPendingSession,
+  const { isPolling, isStarting, authError, authUrl, startTelegramLinking, startGoogleLogin, checkPendingSession,
     loginWithEmailPassword, showTelegramPrompt, linkProvider, startPasswordRecovery, cancelPendingAuth } = useAuthStore();
   const busy = emailLoading || isStarting || isPolling;
   useEffect(() => {
@@ -68,6 +68,11 @@ export const AuthRequiredModal = ({ isOpen, onClose, title = tr('Вход в а�
         {isPolling && <div style={{ margin: '12px 0', padding: 12, borderRadius: 12, color: '#e9d5ff', background: 'rgba(168,85,247,.12)', fontSize: '.84rem' }}>
           <RefreshCw size={16} className="spin" style={{ verticalAlign: 'middle', marginRight: 8 }} />{tr('Подтвердите вход в открывшемся окне и вернитесь в приложение.')}
         </div>}
+        {isPolling && authUrl && <a href={authUrl} target="_blank" rel="noopener noreferrer"
+          style={{ display: 'block', marginTop: 6, padding: '10px 14px', borderRadius: 10, textAlign: 'center',
+            background: 'rgba(168,85,247,.15)', color: '#d8b4fe', fontSize: '.84rem', textDecoration: 'none' }}>
+          {tr('Окно не открылось? Нажмите здесь ↗')}
+        </a>}
         <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
           <button className="btn btn-primary" disabled={busy} onClick={() => showTelegramPrompt ? linkProvider('telegram') : recovery ? startPasswordRecovery('telegram') : startTelegramLinking()} style={buttonStyle}><Send size={18} />{showTelegramPrompt ? tr('Добавить Telegram') : tr('Войти через Telegram')}</button>
           {!showTelegramPrompt && <button className="btn btn-secondary" disabled={busy} onClick={() => recovery ? startPasswordRecovery('google') : startGoogleLogin()} style={{ ...buttonStyle, borderColor: 'rgba(255,255,255,.22)' }}><b style={{ fontSize: '1.1rem' }}>G</b>{tr('Войти через Google')}</button>}
